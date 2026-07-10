@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
+import cors from "@fastify/cors";
 import type { Db } from "./db.js";
 import { insertPoolWithJoinCode } from "./joinCodes.js";
 import { encryptPick, type PickPayload } from "./crypto.js";
@@ -15,6 +16,12 @@ export interface ServerDeps {
 // TODO: verify Privy auth token on every route; no auth for now.
 export function buildServer({ db, pickKey, entryProvider, resultsStore }: ServerDeps): FastifyInstance {
   const app = Fastify();
+
+  // Browser app is served from a different origin (vite :5173 in dev).
+  // CORS_ORIGIN accepts a comma-separated allowlist; defaults to allow-all
+  // while there is no auth (see TODO above — tighten together with auth).
+  const origins = process.env.CORS_ORIGIN?.split(",").map((s) => s.trim());
+  app.register(cors, { origin: origins ?? true });
 
   // Create pool (design §6): organizer registers the on-chain pool pubkey,
   // backend mints the short join code.
