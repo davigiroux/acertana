@@ -119,3 +119,29 @@ Scaffold session, 2026-07-10. Each step: what was done, why, and what was punted
   Everything Rust-side that can compile without the SBF toolchain compiles.
   Run `anchor build` once on a normal network to confirm; no code changes are
   expected.
+
+## Goal 4 — frontend base flow (join → picks → commit)
+
+Wired `/j/:code` (join code → Privy email login → join POST → pool page) and
+`/p/:poolPubkey` (fixture list, commit_pick built client-side mirroring
+backend/src/program.ts, sent via `Connection(VITE_RPC_URL)` behind a mockable
+`ChainClient`). Minimal hand-rolled router (app/src/lib/router.ts) — no
+react-router dep. Fixtures come from a static module
+(app/src/lib/fixtures.ts) because the backend has no GET fixtures route yet —
+TODO(real endpoint).
+
+Manual-path caveats:
+- **HTTPS/Privy**: Privy embedded wallets need WebCrypto, so the app must be
+  served over HTTPS (localhost is exempt). The embedded wallet is created
+  AFTER login completes — pages gate signing on `ready` + `address`.
+- **Env vars** (app/.env.example): `VITE_PRIVY_APP_ID` (Privy dashboard),
+  `VITE_BACKEND_URL` (Fastify backend base URL), `VITE_RPC_URL` (Solana RPC —
+  localnet `http://127.0.0.1:8899` or a devnet endpoint). Backend fetches and
+  chain sends throw early with a clear message if unset.
+- Commit flow POSTs the plaintext pick + salt to `POST /picks` (backend
+  encrypts at rest for auto-reveal), after the on-chain commit confirms.
+
+Gotcha found while testing: an entries-refresh effect that *replaces* state
+(`setEntries(Object.fromEntries(...))`) races the post-commit local marker —
+the fetch resolves after the commit and clobbers it back to null. Fixed by
+merging (fetched non-null wins; null never overwrites an existing key).
