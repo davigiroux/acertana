@@ -34,7 +34,7 @@ per-fixture salt derived from a wallet signature over
 - Done = vitest round-trip: TS commitment == program-side hash for a test-vector
   table (incl. 0–0, 9–9); salt derivation deterministic per (pool, fixture) and
   distinct across fixtures.
-- Status: pending
+- Status: done — PR #3 (11 vitest + Rust cross-check green)
 
 ## Goal 3 — Backend skeleton
 
