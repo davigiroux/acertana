@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { postPick } from '../lib/api';
+import { enqueuePendingPick, retryPendingPicks } from '../lib/pendingPicks';
 import { getFixtures, type Fixture } from '../lib/fixtures';
 import { computeCommitment, deriveSalt } from '../lib/commitment';
 import {
@@ -30,6 +31,12 @@ export function PoolPage({
   const chain = useMemo(() => chainClient ?? createChainClient(), [chainClient]);
   const [fixtures, setFixtures] = useState<Fixture[] | null>(fixturesProp ?? null);
   const [entries, setEntries] = useState<Record<number, EntryState | null>>({});
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Retry payload uploads that failed after their on-chain commit landed.
+  useEffect(() => {
+    retryPendingPicks().catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (fixturesProp) return;
@@ -83,14 +90,22 @@ export function PoolPage({
         commitment,
         signTransaction: (tx) => wallet.signTransaction(tx),
       });
-      await postPick({
+      const payload = {
         poolPubkey,
         wallet: address,
         fixtureId,
         homeGoals,
         awayGoals,
         saltHex: bytesToHex(salt),
-      });
+      };
+      try {
+        await postPick(payload);
+      } catch {
+        // On-chain commit landed; keep the payload locally and retry later
+        // (backend needs it for auto-reveal).
+        enqueuePendingPick(payload);
+        setNotice('Pick saved locally, will retry upload');
+      }
       setEntries((prev) => ({
         ...prev,
         [fixtureId]: { revealed: false, homeGoals: 0, awayGoals: 0 },
@@ -113,6 +128,7 @@ export function PoolPage({
   return (
     <section>
       <h2>Pool {poolPubkey}</h2>
+      {notice && <p role="status">{notice}</p>}
       <ul>
         {fixtures.map((f) => (
           <FixtureRow

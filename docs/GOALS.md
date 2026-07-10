@@ -46,7 +46,7 @@ endpoints stay TODO). Provide a `fixtures.seed.json` dev dataset.
 - Done = vitest integration: create pool → join via code → roster returns
   member; reveal worker submits a valid reveal against the program on a local
   validator (or bankrun); encrypted store round-trips.
-- Status: pending
+- Status: done — PR #4 (11 vitest incl. bankrun e2e reveal, tsc clean)
 
 ## Goal 4 — Frontend base flow
 
@@ -56,7 +56,7 @@ revealed state. Plain, functional UI only — polish is explicitly out of scope.
 
 - Done = `npm run build` green + vitest component/flow tests green with wallet +
   chain mocked; manual-path notes in BUILD_LOG for the HTTPS/Privy caveat.
-- Status: pending
+- Status: done — PR #6 (16 vitest flow tests green, build green)
 
 ## Goal 5 — Scoring + leaderboard engine
 
@@ -76,7 +76,7 @@ is green and self-contained.
 
 - Done = review findings addressed or explicitly waived in PR notes; all builds
   and test suites green from a clean checkout.
-- Status: pending
+- Status: done — 10 confirmed review findings fixed; all suites green (10 Rust, 44 backend, 19 app)
 
 ## Pre-blocked (do not attempt)
 

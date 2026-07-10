@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "register-fixtures": "tsx src/registerFixtures.ts"
   },
   "dependencies": {
     "@noble/hashes": "2.2.0",

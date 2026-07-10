@@ -93,4 +93,43 @@ describe("API", () => {
     expect(row.revealed).toBe(0);
     expect(row.ciphertext).not.toContain("11".repeat(32)); // stored encrypted
   });
+
+  const pick = (overrides: Record<string, unknown> = {}) => ({
+    poolPubkey: POOL,
+    wallet: "W1",
+    fixtureId: 1001,
+    homeGoals: 2,
+    awayGoals: 1,
+    saltHex: "11".repeat(32),
+    ...overrides,
+  });
+
+  it("second pick for same (pool, wallet, fixture) -> 409, row unchanged", async () => {
+    const first = await app.inject({ method: "POST", url: "/picks", payload: pick() });
+    expect(first.statusCode).toBe(201);
+    const before = db.prepare("SELECT ciphertext FROM picks").get() as { ciphertext: string };
+
+    const second = await app.inject({
+      method: "POST",
+      url: "/picks",
+      payload: pick({ homeGoals: 5, awayGoals: 5 }),
+    });
+    expect(second.statusCode).toBe(409);
+    const after = db.prepare("SELECT ciphertext, revealed FROM picks").get() as {
+      ciphertext: string;
+      revealed: number;
+    };
+    expect(after.ciphertext).toBe(before.ciphertext);
+    expect(after.revealed).toBe(0);
+  });
+
+  it.each([
+    ["homeGoals 300", pick({ homeGoals: 300 })],
+    ["homeGoals 2.5", pick({ homeGoals: 2.5 })],
+    ["fixtureId 1.5", pick({ fixtureId: 1.5 })],
+  ])("rejects invalid pick (%s) -> 400", async (_name, payload) => {
+    const res = await app.inject({ method: "POST", url: "/picks", payload });
+    expect(res.statusCode).toBe(400);
+    expect((db.prepare("SELECT COUNT(*) AS n FROM picks").get() as { n: number }).n).toBe(0);
+  });
 });

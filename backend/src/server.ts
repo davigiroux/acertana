@@ -109,26 +109,34 @@ export function buildServer({ db, pickKey, entryProvider, resultsStore }: Server
       saltHex?: string;
     };
   }>("/picks", async (req, reply) => {
+    // TODO(auth): verify Privy token — anyone can currently post for any wallet.
     const { poolPubkey, wallet, fixtureId, homeGoals, awayGoals, saltHex } = req.body ?? {};
+    const isGoals = (n: unknown): n is number =>
+      typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 9;
     if (
       !poolPubkey ||
       !wallet ||
       typeof fixtureId !== "number" ||
-      typeof homeGoals !== "number" ||
-      typeof awayGoals !== "number" ||
+      !Number.isSafeInteger(fixtureId) ||
+      fixtureId <= 0 ||
+      !isGoals(homeGoals) ||
+      !isGoals(awayGoals) ||
       !saltHex ||
       Buffer.from(saltHex, "hex").length !== 32
     ) {
       return reply
         .code(400)
-        .send({ error: "poolPubkey, wallet, fixtureId, homeGoals, awayGoals, saltHex(32B) required" });
+        .send({ error: "poolPubkey, wallet, fixtureId, homeGoals(0-9), awayGoals(0-9), saltHex(32B) required" });
     }
     const payload: PickPayload = { homeGoals, awayGoals, saltHex };
+    // Entry is init-only on-chain, so a stored pick is immutable too: reject overwrites.
+    const existing = db
+      .prepare("SELECT 1 FROM picks WHERE pool_pubkey = ? AND wallet = ? AND fixture_id = ?")
+      .get(poolPubkey, wallet, fixtureId);
+    if (existing) return reply.code(409).send({ error: "pick already stored" });
     db.prepare(
       `INSERT INTO picks (pool_pubkey, wallet, fixture_id, ciphertext, revealed)
-       VALUES (?, ?, ?, ?, 0)
-       ON CONFLICT (pool_pubkey, wallet, fixture_id)
-       DO UPDATE SET ciphertext = excluded.ciphertext, revealed = 0`,
+       VALUES (?, ?, ?, ?, 0)`,
     ).run(poolPubkey, wallet, fixtureId, encryptPick(payload, pickKey));
     return reply.code(201).send({ ok: true });
   });

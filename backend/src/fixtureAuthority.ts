@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { Keypair, Transaction } from "@solana/web3.js";
+import { Keypair, Transaction, sendAndConfirmTransaction, type Connection } from "@solana/web3.js";
 import { registerFixtureIx } from "./program.js";
 import { loadFixtures, type Fixture } from "./txline/stub.js";
 
@@ -16,6 +16,11 @@ export function loadFixtureAuthority(
 
 export interface SendTransaction {
   (tx: Transaction, signers: Keypair[]): Promise<string>;
+}
+
+/** Real SendTransaction over an RPC connection. */
+export function sendViaConnection(connection: Connection): SendTransaction {
+  return (tx, signers) => sendAndConfirmTransaction(connection, tx, signers);
 }
 
 /** Build a signed-by-authority register_fixture tx for one fixture. */

@@ -58,6 +58,9 @@ export function FixtureRow({
         </span>
       ) : status === 'locked' ? (
         <span>locked</span>
+      ) : status === 'committed' ? (
+        // Entry is init-only on-chain: no re-commit possible.
+        <span>committed</span>
       ) : (
         <>
           <input
@@ -77,9 +80,8 @@ export function FixtureRow({
             onChange={(e) => setAway(clampGoals(e.target.value))}
           />
           <button onClick={commit} disabled={busy}>
-            {status === 'committed' ? 'Re-commit' : 'Commit'}
+            Commit
           </button>
-          {status === 'committed' && <span>committed</span>}
         </>
       )}
       {error && <span role="alert">{error}</span>}
