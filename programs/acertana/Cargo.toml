@@ -18,3 +18,10 @@ idl-build = ["anchor-lang/idl-build"]
 
 [dependencies]
 anchor-lang = "0.31.1"
+
+[dev-dependencies]
+litesvm = "0.6"
+serde_json = "1"
+sha2 = "0.10"
+solana-keccak-hasher = "2"
+solana-sdk = "2"
