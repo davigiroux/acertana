@@ -2,14 +2,18 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type { Db } from "./db.js";
 import { insertPoolWithJoinCode } from "./joinCodes.js";
 import { encryptPick, type PickPayload } from "./crypto.js";
+import { computeStandings, type EntryProvider } from "./leaderboard.js";
+import { ResultsStore } from "./results.js";
 
 export interface ServerDeps {
   db: Db;
   pickKey: Buffer;
+  entryProvider?: EntryProvider;
+  resultsStore?: ResultsStore;
 }
 
 // TODO: verify Privy auth token on every route; no auth for now.
-export function buildServer({ db, pickKey }: ServerDeps): FastifyInstance {
+export function buildServer({ db, pickKey, entryProvider, resultsStore }: ServerDeps): FastifyInstance {
   const app = Fastify();
 
   // Create pool (design §6): organizer registers the on-chain pool pubkey,
@@ -70,6 +74,27 @@ export function buildServer({ db, pickKey }: ServerDeps): FastifyInstance {
         emailHint: m.email_hint,
         joinedAt: m.joined_at,
       })),
+    };
+  });
+
+  // Leaderboard (design §3/§4): revealed on-chain entries × TxLINE results.
+  app.get<{ Params: { pubkey: string } }>("/pools/:pubkey/leaderboard", async (req, reply) => {
+    if (!entryProvider || !resultsStore) {
+      return reply.code(503).send({ error: "leaderboard not configured" });
+    }
+    const pool = db
+      .prepare("SELECT pool_pubkey FROM pools WHERE pool_pubkey = ?")
+      .get(req.params.pubkey);
+    if (!pool) return reply.code(404).send({ error: "unknown pool" });
+    const members = (
+      db.prepare("SELECT wallet FROM members WHERE pool_pubkey = ? ORDER BY joined_at")
+        .all(req.params.pubkey) as { wallet: string }[]
+    ).map((m) => m.wallet);
+    const entries = await entryProvider.getRevealedEntries(req.params.pubkey);
+    return {
+      standings: computeStandings(members, entries, resultsStore.scorelines()),
+      updatedAt: resultsStore.updatedAt(),
+      provisional: resultsStore.hasProvisional(),
     };
   });
 

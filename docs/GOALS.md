@@ -66,7 +66,7 @@ stub feed. Lives in backend, exposed via one `GET /pools/:id/leaderboard`.
 
 - Done = unit-test table covering every scoring tier + draw edge cases;
   aggregation test over a multi-member fixture set; endpoint test green.
-- Status: pending
+- Status: done — PR #5 (38 backend tests green, tsc clean)
 
 ## Goal 6 — Sweep
 
