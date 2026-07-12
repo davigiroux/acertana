@@ -17,10 +17,18 @@ export async function getJoinInfo(code: string): Promise<JoinInfo> {
   return res.json();
 }
 
-export async function postJoin(poolPubkey: string, wallet: string): Promise<void> {
+function authHeaders(accessToken?: string): Record<string, string> {
+  return accessToken ? { authorization: `Bearer ${accessToken}` } : {};
+}
+
+export async function postJoin(
+  poolPubkey: string,
+  wallet: string,
+  accessToken?: string,
+): Promise<void> {
   const res = await fetch(`${backendUrl()}/pools/${encodeURIComponent(poolPubkey)}/join`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders(accessToken) },
     body: JSON.stringify({ wallet }),
   });
   if (!res.ok) throw new Error(`join failed (${res.status})`);
@@ -36,10 +44,10 @@ export interface PickPayload {
 }
 
 /** Store the pick payload (encrypted at rest by the backend) for auto-reveal. */
-export async function postPick(payload: PickPayload): Promise<void> {
+export async function postPick(payload: PickPayload, accessToken?: string): Promise<void> {
   const res = await fetch(`${backendUrl()}/picks`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders(accessToken) },
     body: JSON.stringify(payload),
   });
   if (!res.ok) throw new Error(`pick upload failed (${res.status})`);

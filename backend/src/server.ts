@@ -5,23 +5,37 @@ import { insertPoolWithJoinCode } from "./joinCodes.js";
 import { encryptPick, type PickPayload } from "./crypto.js";
 import { computeStandings, type EntryProvider } from "./leaderboard.js";
 import { ResultsStore } from "./results.js";
+import { listFixtures } from "./fixtureSync.js";
+import type { WalletVerifier } from "./auth.js";
 
 export interface ServerDeps {
   db: Db;
   pickKey: Buffer;
   entryProvider?: EntryProvider;
   resultsStore?: ResultsStore;
+  /** When set, join/picks require a Privy token proving ownership of the wallet. */
+  verifyWallet?: WalletVerifier;
+  /** When set, enables POST /admin/results guarded by the x-admin-token header. */
+  adminToken?: string;
 }
 
-// TODO: verify Privy auth token on every route; no auth for now.
-export function buildServer({ db, pickKey, entryProvider, resultsStore }: ServerDeps): FastifyInstance {
+export function buildServer({
+  db,
+  pickKey,
+  entryProvider,
+  resultsStore,
+  verifyWallet,
+  adminToken,
+}: ServerDeps): FastifyInstance {
   const app = Fastify();
 
   // Browser app is served from a different origin (vite :5173 in dev).
-  // CORS_ORIGIN accepts a comma-separated allowlist; defaults to allow-all
-  // while there is no auth (see TODO above — tighten together with auth).
+  // CORS_ORIGIN accepts a comma-separated allowlist; set it in any deployment.
   const origins = process.env.CORS_ORIGIN?.split(",").map((s) => s.trim());
   app.register(cors, { origin: origins ?? true });
+
+  // Fixture list for the app's pick UI (synced from TxLINE or the dev seed).
+  app.get("/fixtures", async () => ({ fixtures: listFixtures(db) }));
 
   // Create pool (design §6): organizer registers the on-chain pool pubkey,
   // backend mints the short join code.
@@ -52,6 +66,9 @@ export function buildServer({ db, pickKey, entryProvider, resultsStore }: Server
     async (req, reply) => {
       const { wallet, emailHint } = req.body ?? {};
       if (!wallet) return reply.code(400).send({ error: "wallet required" });
+      if (verifyWallet && !(await verifyWallet(req.headers.authorization, wallet))) {
+        return reply.code(401).send({ error: "invalid auth token for wallet" });
+      }
       const pool = db
         .prepare("SELECT pool_pubkey FROM pools WHERE pool_pubkey = ?")
         .get(req.params.pubkey);
@@ -116,8 +133,10 @@ export function buildServer({ db, pickKey, entryProvider, resultsStore }: Server
       saltHex?: string;
     };
   }>("/picks", async (req, reply) => {
-    // TODO(auth): verify Privy token — anyone can currently post for any wallet.
     const { poolPubkey, wallet, fixtureId, homeGoals, awayGoals, saltHex } = req.body ?? {};
+    if (wallet && verifyWallet && !(await verifyWallet(req.headers.authorization, wallet))) {
+      return reply.code(401).send({ error: "invalid auth token for wallet" });
+    }
     const isGoals = (n: unknown): n is number =>
       typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 9;
     if (
@@ -146,6 +165,26 @@ export function buildServer({ db, pickKey, entryProvider, resultsStore }: Server
        VALUES (?, ?, ?, ?, 0)`,
     ).run(poolPubkey, wallet, fixtureId, encryptPick(payload, pickKey));
     return reply.code(201).send({ ok: true });
+  });
+
+  // Manual result injection (demos; fixtures outside the live feed's coverage).
+  app.post<{
+    Body: { fixtureId?: number; homeGoals?: number; awayGoals?: number; final?: boolean };
+  }>("/admin/results", async (req, reply) => {
+    if (!adminToken || !resultsStore) return reply.code(404).send({ error: "not enabled" });
+    if (req.headers["x-admin-token"] !== adminToken) {
+      return reply.code(401).send({ error: "bad admin token" });
+    }
+    const { fixtureId, homeGoals, awayGoals, final } = req.body ?? {};
+    if (
+      typeof fixtureId !== "number" ||
+      typeof homeGoals !== "number" ||
+      typeof awayGoals !== "number"
+    ) {
+      return reply.code(400).send({ error: "fixtureId, homeGoals, awayGoals required" });
+    }
+    resultsStore.apply({ fixtureId, homeGoals, awayGoals, final: final ?? true });
+    return { ok: true };
   });
 
   return app;

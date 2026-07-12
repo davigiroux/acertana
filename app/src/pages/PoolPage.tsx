@@ -27,7 +27,7 @@ export function PoolPage({
   fixtures?: Fixture[];
   nowTs?: number;
 }) {
-  const { authenticated, ready, address, wallet, login } = useInvisibleWallet();
+  const { authenticated, ready, address, wallet, login, getAccessToken } = useInvisibleWallet();
   const chain = useMemo(() => chainClient ?? createChainClient(), [chainClient]);
   const [fixtures, setFixtures] = useState<Fixture[] | null>(fixturesProp ?? null);
   const [entries, setEntries] = useState<Record<number, EntryState | null>>({});
@@ -35,8 +35,10 @@ export function PoolPage({
 
   // Retry payload uploads that failed after their on-chain commit landed.
   useEffect(() => {
-    retryPendingPicks().catch(() => undefined);
-  }, []);
+    retryPendingPicks(async (p) => postPick(p, (await getAccessToken()) ?? undefined)).catch(
+      () => undefined,
+    );
+  }, [getAccessToken]);
 
   useEffect(() => {
     if (fixturesProp) return;
@@ -99,7 +101,7 @@ export function PoolPage({
         saltHex: bytesToHex(salt),
       };
       try {
-        await postPick(payload);
+        await postPick(payload, (await getAccessToken()) ?? undefined);
       } catch {
         // On-chain commit landed; keep the payload locally and retry later
         // (backend needs it for auto-reveal).
@@ -111,7 +113,7 @@ export function PoolPage({
         [fixtureId]: { revealed: false, homeGoals: 0, awayGoals: 0 },
       }));
     },
-    [wallet, address, poolPubkey, chain],
+    [wallet, address, poolPubkey, chain, getAccessToken],
   );
 
   if (!authenticated) {

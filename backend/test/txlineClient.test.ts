@@ -6,7 +6,7 @@ import {
   parseSse,
   soccerStatus,
   toUnixSeconds,
-} from "./client.js";
+} from "../src/txline/client.js";
 
 const KICKOFF = 1786000000;
 

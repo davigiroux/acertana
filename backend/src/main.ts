@@ -6,18 +6,25 @@ import { ChainEntryProvider } from "./leaderboard.js";
 import { ResultsStore } from "./results.js";
 import { loadFixtures, scoreEvents } from "./txline/stub.js";
 import { TxlineClient } from "./txline/client.js";
+import { kickoffOf, upsertFixtures } from "./fixtureSync.js";
+import { privyWalletVerifier } from "./auth.js";
 import { loadFixtureAuthority, sendViaConnection } from "./fixtureAuthority.js";
 import { runRevealWorker } from "./revealWorker.js";
 
 const connection = new Connection(process.env.RPC_URL ?? "http://127.0.0.1:8899", "confirmed");
 const resultsStore = new ResultsStore();
+const db = openDb();
+
+let txline: TxlineClient | undefined;
 // Score feed precedence: opt-in stub for local dev; else the real TxLINE SSE
 // stream when an API token is configured (mint one with `npm run
 // txline-subscribe`); else the store starts empty (leaderboard shows zeros).
 if (process.env.TXLINE_STUB === "1") {
+  // Local dev: seed the fixtures table + fake score feed from the seed json.
+  upsertFixtures(db, loadFixtures(), Math.floor(Date.now() / 1000));
   resultsStore.consume(scoreEvents()).catch((err) => console.error("score feed failed", err));
 } else if (process.env.TXLINE_API_TOKEN) {
-  const txline = new TxlineClient({
+  txline = new TxlineClient({
     apiOrigin: process.env.TXLINE_API_ORIGIN ?? "https://txline-dev.txodds.com",
     apiToken: process.env.TXLINE_API_TOKEN,
     competitionId: process.env.TXLINE_COMPETITION_ID
@@ -27,10 +34,27 @@ if (process.env.TXLINE_STUB === "1") {
   resultsStore
     .consume(txline.scoreEvents())
     .catch((err) => console.error("txline score feed failed", err));
+
+  // Periodic fixtures sync from TxLINE into the DB (API + reveal worker source).
+  // On-chain registration of new fixtures runs from registerFixtures CLI or here.
+  const syncFixtures = async () => {
+    const fixtures = await txline!.fetchFixtures();
+    upsertFixtures(db, fixtures, Math.floor(Date.now() / 1000));
+    console.log(`synced ${fixtures.length} fixtures from txline`);
+  };
+  syncFixtures().catch((err) => console.error("fixture sync failed", err));
+  setInterval(
+    () => syncFixtures().catch((err) => console.error("fixture sync failed", err)),
+    Number(process.env.FIXTURE_SYNC_INTERVAL_MS ?? 6 * 3600_000),
+  );
 }
 
-const db = openDb();
 const pickKey = loadKey();
+const verifyWallet =
+  process.env.PRIVY_APP_ID && process.env.PRIVY_APP_SECRET
+    ? privyWalletVerifier(process.env.PRIVY_APP_ID, process.env.PRIVY_APP_SECRET)
+    : undefined;
+if (!verifyWallet) console.warn("PRIVY_APP_ID/SECRET unset — join/picks run UNAUTHENTICATED");
 const app = buildServer({
   db,
   pickKey,
@@ -38,18 +62,21 @@ const app = buildServer({
     getProgramAccounts: (programId, config) => connection.getProgramAccounts(programId, config),
   }),
   resultsStore,
+  verifyWallet,
+  adminToken: process.env.ADMIN_TOKEN,
 });
 
 // Auto-reveal worker (design §2): decrypt stored picks past kickoff and submit
 // permissionless reveal_pick txs on an interval.
 // TODO: dedicated reveal fee payer; reuses the fixture-authority keypair for now.
-const kickoffs = new Map(loadFixtures().map((f) => [f.fixtureId, f.kickoffTs]));
 const revealDeps = {
   db,
   key: pickKey,
   payer: loadFixtureAuthority(),
   send: sendViaConnection(connection),
-  kickoffOf: (fixtureId: number) => kickoffs.get(fixtureId),
+  // Kickoffs come from the DB fixtures table (seeded by stub or TxLINE sync),
+  // so picks on fixtures beyond the static seed still auto-reveal.
+  kickoffOf: (fixtureId: number) => kickoffOf(db, fixtureId),
 };
 const revealIntervalMs = Number(process.env.REVEAL_INTERVAL_MS ?? 60_000);
 setInterval(() => {

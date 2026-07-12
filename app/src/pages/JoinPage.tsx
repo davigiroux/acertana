@@ -8,7 +8,7 @@ import { useInvisibleWallet } from '../lib/wallet/useInvisibleWallet';
  * with the invisible wallet, then land on the pool page.
  */
 export function JoinPage({ code }: { code: string }) {
-  const { authenticated, ready, address, login } = useInvisibleWallet();
+  const { authenticated, ready, address, login, getAccessToken } = useInvisibleWallet();
   const [info, setInfo] = useState<JoinInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const joining = useRef(false);
@@ -27,13 +27,14 @@ export function JoinPage({ code }: { code: string }) {
     // Wallet is created AFTER login completes; gate on ready + address.
     if (!info || !authenticated || !ready || !address || joining.current) return;
     joining.current = true;
-    postJoin(info.poolPubkey, address)
+    getAccessToken()
+      .then((token) => postJoin(info.poolPubkey, address, token ?? undefined))
       .then(() => navigate(`/p/${info.poolPubkey}`))
       .catch((e) => {
         joining.current = false;
         setError(String(e.message ?? e));
       });
-  }, [info, authenticated, ready, address]);
+  }, [info, authenticated, ready, address, getAccessToken]);
 
   if (error) return <p role="alert">Error: {error}</p>;
   if (!info) return <p>Looking up join code…</p>;

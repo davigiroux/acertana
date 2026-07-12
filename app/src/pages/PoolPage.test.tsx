@@ -17,6 +17,7 @@ const wallet = {
 
 const walletState = {
   authenticated: true,
+  getAccessToken: async () => 'test-token',
   ready: true,
   address: 'PARTICIPANT1',
   wallet,
@@ -99,7 +100,7 @@ describe('PoolPage', () => {
       homeGoals: 2,
       awayGoals: 1,
       saltHex: bytesToHex(SALT),
-    });
+    }, 'test-token');
 
     // Marked committed in the UI.
     expect(await screen.findByText('committed')).toBeTruthy();
@@ -171,7 +172,7 @@ describe('PoolPage', () => {
     render(
       <PoolPage poolPubkey={POOL} chainClient={mockChain()} fixtures={[fixture()]} nowTs={NOW} />,
     );
-    await waitFor(() => expect(postPick).toHaveBeenCalledWith(pending));
+    await waitFor(() => expect(postPick).toHaveBeenCalledWith(pending, 'test-token'));
     await waitFor(() =>
       expect(JSON.parse(localStorage.getItem('acertana.pendingPicks') ?? '[]')).toHaveLength(0),
     );
