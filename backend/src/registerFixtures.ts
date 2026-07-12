@@ -1,21 +1,44 @@
 /**
- * CLI: register the seed fixtures on-chain (design §1).
+ * CLI: register fixtures on-chain (design §1).
  *
  *   RPC_URL=http://127.0.0.1:8899 npm run register-fixtures
  *
- * Env: RPC_URL (default local validator), FIXTURE_AUTHORITY_KEYPAIR (path to
- * authority keypair JSON), SEED_PATH (optional fixtures seed file override).
+ * Fixture source: TxLINE when TXLINE_API_TOKEN is set (also upserts the DB
+ * fixtures table), else the local seed json.
+ * Env: RPC_URL (default local validator), FIXTURE_AUTHORITY_KEYPAIR[_B64],
+ * SEED_PATH (seed file override), TXLINE_API_TOKEN / TXLINE_API_ORIGIN /
+ * TXLINE_COMPETITION_ID, DB_PATH.
  * Already-registered fixtures ("already in use" Fixture PDA) are skipped.
  */
 import { Connection } from "@solana/web3.js";
 import { loadFixtureAuthority, registerSeedFixtures, sendViaConnection } from "./fixtureAuthority.js";
-import { loadFixtures } from "./txline/stub.js";
+import { loadFixtures, type Fixture } from "./txline/stub.js";
+import { TxlineClient } from "./txline/client.js";
+import { openDb } from "./db.js";
+import { upsertFixtures } from "./fixtureSync.js";
+
+async function sourceFixtures(): Promise<Fixture[]> {
+  if (!process.env.TXLINE_API_TOKEN) {
+    return process.env.SEED_PATH ? loadFixtures(process.env.SEED_PATH) : loadFixtures();
+  }
+  const txline = new TxlineClient({
+    apiOrigin: process.env.TXLINE_API_ORIGIN ?? "https://txline-dev.txodds.com",
+    apiToken: process.env.TXLINE_API_TOKEN,
+    competitionId: process.env.TXLINE_COMPETITION_ID
+      ? Number(process.env.TXLINE_COMPETITION_ID)
+      : undefined,
+  });
+  const fixtures = await txline.fetchFixtures();
+  upsertFixtures(openDb(), fixtures, Math.floor(Date.now() / 1000));
+  console.log(`sourced ${fixtures.length} fixtures from TxLINE (DB updated)`);
+  return fixtures;
+}
 
 async function main(): Promise<void> {
   const rpcUrl = process.env.RPC_URL ?? "http://127.0.0.1:8899";
   const connection = new Connection(rpcUrl, "confirmed");
   const authority = loadFixtureAuthority();
-  const fixtures = process.env.SEED_PATH ? loadFixtures(process.env.SEED_PATH) : loadFixtures();
+  const fixtures = await sourceFixtures();
   const rawSend = sendViaConnection(connection);
 
   console.log(`registering ${fixtures.length} fixtures on ${rpcUrl} as ${authority.publicKey.toBase58()}`);

@@ -50,11 +50,20 @@ if (process.env.TXLINE_STUB === "1") {
 }
 
 const pickKey = loadKey();
+// Fail closed: without Privy creds the server refuses to start unless local
+// dev explicitly opts out with ALLOW_UNAUTHENTICATED=1.
 const verifyWallet =
   process.env.PRIVY_APP_ID && process.env.PRIVY_APP_SECRET
     ? privyWalletVerifier(process.env.PRIVY_APP_ID, process.env.PRIVY_APP_SECRET)
     : undefined;
-if (!verifyWallet) console.warn("PRIVY_APP_ID/SECRET unset — join/picks run UNAUTHENTICATED");
+if (!verifyWallet) {
+  if (process.env.ALLOW_UNAUTHENTICATED !== "1") {
+    throw new Error(
+      "PRIVY_APP_ID/PRIVY_APP_SECRET unset. Set them, or ALLOW_UNAUTHENTICATED=1 for local dev.",
+    );
+  }
+  console.warn("ALLOW_UNAUTHENTICATED=1 — join/picks run without auth (local dev only)");
+}
 const app = buildServer({
   db,
   pickKey,

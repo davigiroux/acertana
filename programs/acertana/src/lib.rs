@@ -12,15 +12,18 @@ declare_id!("9hhdvFyxcW95p3bJMUij5Bsq1rrURK4EfTSjqYv4T5zn");
 
 /// Trusted authority allowed to register fixtures (kickoff times from TxLINE).
 /// Rotatable only by program upgrade for now (spec: out of scope beyond a
-/// single key). Keypair for local tests: tests/fixtures/fixture-authority.json.
+/// single key).
 ///
-/// *** SECURITY: THIS IS A PUBLISHED DEV KEY. *** Its private key is committed
-/// to the repo (tests/fixtures/fixture-authority.json), so anyone with repo
-/// access can sign register_fixture and brick fixtures. Acceptable ONLY while
-/// the project is local-only (devnet deploy is pre-blocked). Before ANY real
-/// deploy: generate a fresh keypair kept out of git, replace this constant,
-/// and ship a program upgrade.
-pub const FIXTURE_AUTHORITY: Pubkey = pubkey!("H83TTjZvtwWBVc18F3R3CecctPun6YcFv26UKTy9ozFk");
+/// Baked in at build time: set FIXTURE_AUTHORITY_PUBKEY when building for a
+/// real network (`FIXTURE_AUTHORITY_PUBKEY=<pubkey> anchor build`), with the
+/// matching keypair kept OUT of git. Without the env var it falls back to the
+/// PUBLISHED DEV KEY (tests/fixtures/fixture-authority.json) — fine for local
+/// validators and `cargo test`, never for a deploy.
+pub const FIXTURE_AUTHORITY: Pubkey =
+    Pubkey::from_str_const(match option_env!("FIXTURE_AUTHORITY_PUBKEY") {
+        Some(pubkey) => pubkey,
+        None => "H83TTjZvtwWBVc18F3R3CecctPun6YcFv26UKTy9ozFk",
+    });
 
 pub const POOL_NAME_MAX_LEN: usize = 32;
 
