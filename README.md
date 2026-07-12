@@ -55,6 +55,30 @@ npm run dev
 Note: Privy's embedded wallet needs HTTPS (localhost is exempt). Deploy to an
 HTTPS URL early for phone / local-network testing.
 
+## Deploy (devnet demo)
+
+Backend → Railway (Dockerfile in `backend/`, mount a volume and point `DB_PATH`
+at it). App → Vercel (static Vite build of `app/`). Program → devnet via
+`FIXTURE_AUTHORITY_PUBKEY=<fresh pubkey> anchor build && anchor deploy`.
+
+Backend env:
+
+| Var | Purpose |
+|---|---|
+| `PICK_STORE_KEY` | 64-hex AES-256-GCM key for the encrypted pick store |
+| `RPC_URL` | Solana RPC (devnet: `https://api.devnet.solana.com`) |
+| `FIXTURE_AUTHORITY_KEYPAIR` / `_B64` | authority keypair path, or base64 of its json |
+| `PRIVY_APP_ID` / `PRIVY_APP_SECRET` | Privy server auth (required unless `ALLOW_UNAUTHENTICATED=1`) |
+| `TXLINE_API_TOKEN` | TxLINE data token — mint once with `npm run txline-subscribe` |
+| `TXLINE_API_ORIGIN` / `TXLINE_COMPETITION_ID` | optional TxLINE overrides |
+| `CORS_ORIGIN` | comma-separated allowed origins (the app's URL) |
+| `ADMIN_TOKEN` | enables `POST /admin/results` for manual result injection |
+| `DB_PATH` | SQLite path (persistent volume in prod) |
+| `TXLINE_STUB=1` | local dev only: seed fixtures + fake score feed |
+
+App env (`app/.env`): `VITE_PRIVY_APP_ID`, `VITE_BACKEND_URL`, `VITE_RPC_URL`.
+Add the deployed app URL to the Privy app's allowed origins.
+
 ## Security notes
 
 - `tests/fixtures/fixture-authority.json` is a PUBLISHED DEV KEY whose pubkey
