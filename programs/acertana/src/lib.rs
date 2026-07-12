@@ -233,6 +233,51 @@ impl Entry {
     pub const SPACE: usize = 8 + 32 + 32 + 8 + 32 + 1 + 1 + 1 + 1; // 116
 }
 
+#[cfg(test)]
+mod tests {
+    use anchor_lang::solana_program::keccak;
+
+    fn commitment_hex(home: u8, away: u8, salt: &[u8; 32]) -> String {
+        let mut preimage = [0u8; 34];
+        preimage[0] = home;
+        preimage[1] = away;
+        preimage[2..].copy_from_slice(salt);
+        keccak::hash(&preimage)
+            .to_bytes()
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
+    }
+
+    /// Cross-check vectors shared with the TS client lib
+    /// (app/src/lib/commitment/commitment.test.ts). Keep in sync.
+    #[test]
+    fn commitment_test_vectors() {
+        let zero_salt = [0u8; 32];
+        let ones_salt = [0x11u8; 32];
+        let inc_salt: [u8; 32] = core::array::from_fn(|i| i as u8);
+
+        let v00 = commitment_hex(0, 0, &zero_salt);
+        let v99 = commitment_hex(9, 9, &ones_salt);
+        let v21 = commitment_hex(2, 1, &inc_salt);
+        println!("(0,0,zeros) = {v00}");
+        println!("(9,9,0x11s) = {v99}");
+        println!("(2,1,incr)  = {v21}");
+        assert_eq!(
+            v00,
+            "bf53adb76067fdab0d008aef3ad8b28bbb63c2ce4c2b63394ede73f01a70c865"
+        );
+        assert_eq!(
+            v99,
+            "a184b447732db82000bb9a63f2925a16cb9eb38abe40c3a8b1d50a05767e5a1b"
+        );
+        assert_eq!(
+            v21,
+            "73539fcb8771b64bd066f8db16ffd2bae8ba804f7c91360b08632ed7f23fc1d3"
+        );
+    }
+}
+
 #[error_code]
 pub enum AcertanaError {
     #[msg("kickoff timestamp must be positive")]
