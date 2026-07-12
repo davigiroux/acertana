@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from "fastify";
+import cors from "@fastify/cors";
 import type { Db } from "./db.js";
 import { insertPoolWithJoinCode } from "./joinCodes.js";
 import { encryptPick, type PickPayload } from "./crypto.js";
@@ -15,6 +16,12 @@ export interface ServerDeps {
 // TODO: verify Privy auth token on every route; no auth for now.
 export function buildServer({ db, pickKey, entryProvider, resultsStore }: ServerDeps): FastifyInstance {
   const app = Fastify();
+
+  // Browser app is served from a different origin (vite :5173 in dev).
+  // CORS_ORIGIN accepts a comma-separated allowlist; defaults to allow-all
+  // while there is no auth (see TODO above — tighten together with auth).
+  const origins = process.env.CORS_ORIGIN?.split(",").map((s) => s.trim());
+  app.register(cors, { origin: origins ?? true });
 
   // Create pool (design §6): organizer registers the on-chain pool pubkey,
   // backend mints the short join code.
@@ -109,26 +116,34 @@ export function buildServer({ db, pickKey, entryProvider, resultsStore }: Server
       saltHex?: string;
     };
   }>("/picks", async (req, reply) => {
+    // TODO(auth): verify Privy token — anyone can currently post for any wallet.
     const { poolPubkey, wallet, fixtureId, homeGoals, awayGoals, saltHex } = req.body ?? {};
+    const isGoals = (n: unknown): n is number =>
+      typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 9;
     if (
       !poolPubkey ||
       !wallet ||
       typeof fixtureId !== "number" ||
-      typeof homeGoals !== "number" ||
-      typeof awayGoals !== "number" ||
+      !Number.isSafeInteger(fixtureId) ||
+      fixtureId <= 0 ||
+      !isGoals(homeGoals) ||
+      !isGoals(awayGoals) ||
       !saltHex ||
       Buffer.from(saltHex, "hex").length !== 32
     ) {
       return reply
         .code(400)
-        .send({ error: "poolPubkey, wallet, fixtureId, homeGoals, awayGoals, saltHex(32B) required" });
+        .send({ error: "poolPubkey, wallet, fixtureId, homeGoals(0-9), awayGoals(0-9), saltHex(32B) required" });
     }
     const payload: PickPayload = { homeGoals, awayGoals, saltHex };
+    // Entry is init-only on-chain, so a stored pick is immutable too: reject overwrites.
+    const existing = db
+      .prepare("SELECT 1 FROM picks WHERE pool_pubkey = ? AND wallet = ? AND fixture_id = ?")
+      .get(poolPubkey, wallet, fixtureId);
+    if (existing) return reply.code(409).send({ error: "pick already stored" });
     db.prepare(
       `INSERT INTO picks (pool_pubkey, wallet, fixture_id, ciphertext, revealed)
-       VALUES (?, ?, ?, ?, 0)
-       ON CONFLICT (pool_pubkey, wallet, fixture_id)
-       DO UPDATE SET ciphertext = excluded.ciphertext, revealed = 0`,
+       VALUES (?, ?, ?, ?, 0)`,
     ).run(poolPubkey, wallet, fixtureId, encryptPick(payload, pickKey));
     return reply.code(201).send({ ok: true });
   });

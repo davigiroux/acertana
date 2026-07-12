@@ -145,3 +145,28 @@ Gotcha found while testing: an entries-refresh effect that *replaces* state
 (`setEntries(Object.fromEntries(...))`) races the post-commit local marker —
 the fetch resolves after the commit and clobbers it back to null. Fixed by
 merging (fetched non-null wins; null never overwrites an existing key).
+
+## Goals build session, 2026-07-09 (overnight loop)
+
+Autonomous goal loop driven by `docs/GOALS.md`; one stacked PR per goal
+(Graphite stack on `davigiroux/acertana-design-spec`).
+
+- **Goal 1 (PR #2)** — program implemented per spec; `anchor build` regenerated
+  the program keypair, id is now `9hhdvFyxcW95p3bJMUij5Bsq1rrURK4EfTSjqYv4T5zn`.
+  8 LiteSVM (0.6.1) integration tests; ix data built manually in tests to keep
+  anchor-lang out of the dev-deps.
+- **Goal 2 (PR #3)** — TS commitment lib; hex test vectors generated from the
+  Rust keccak first, kept as a permanent Rust cross-check test. Salt message is
+  51 bytes ("acertana:v1"=11 + pool 32 + fixture u64 LE 8).
+- **Goal 3 (PR #4)** — backend (fastify + better-sqlite3); reveal worker proven
+  end-to-end against the compiled .so via solana-bankrun with a clock warp.
+- **Goal 4 (PR #6)** — frontend flow with hand-rolled router + mockable
+  ChainClient; fixed a post-commit state race in the entries refresh. Fixtures
+  come from a static seed mirror until the backend exposes a fixtures endpoint.
+- **Goal 5 (PR #5)** — scoring 5/3/1/0 + standings with shared-rank ties;
+  ChainEntryProvider (gPA dataSize=116, memcmp pool@8); provisional→final
+  results store over the stubbed feed.
+- **Goal 6** — full-stack code review sweep, docs, Graphite stack conversion.
+
+Toolchain note: this machine has anchor-cli 1.0.2 + solana-cli 3.1.15; the
+crate stays on anchor-lang 0.31.1 and builds/tests fine with both.

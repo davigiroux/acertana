@@ -3,13 +3,17 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "register-fixtures": "tsx src/registerFixtures.ts"
   },
   "dependencies": {
+    "@fastify/cors": "^11.3.0",
     "@noble/hashes": "2.2.0",
     "@solana/web3.js": "1.98.4",
     "better-sqlite3": "^12.4.1",

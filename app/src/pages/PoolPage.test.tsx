@@ -55,7 +55,10 @@ function mockChain(entry: Awaited<ReturnType<ChainClient['getEntry']>> = null): 
 }
 
 describe('PoolPage', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
   afterEach(cleanup);
 
   it('commit flow: derives salt, computes commitment, sends tx, posts pick', async () => {
@@ -129,5 +132,48 @@ describe('PoolPage', () => {
     expect(await screen.findByText(/Revealed: 3 – 2/)).toBeTruthy();
     expect(chain.getEntry).toHaveBeenCalledWith(POOL, 'PARTICIPANT1', 1001n);
     expect(screen.queryByRole('spinbutton')).toBeNull();
+  });
+
+  it('committed entry: marker only, no re-commit affordance (Entry is init-only)', async () => {
+    const chain = mockChain({ revealed: false, homeGoals: 0, awayGoals: 0 });
+    render(
+      <PoolPage poolPubkey={POOL} chainClient={chain} fixtures={[fixture()]} nowTs={NOW} />,
+    );
+    expect(await screen.findByText('committed')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /commit/i })).toBeNull();
+    expect(screen.queryByRole('spinbutton')).toBeNull();
+  });
+
+  it('failed postPick after commit: queued in localStorage, saved-locally notice', async () => {
+    vi.mocked(postPick).mockRejectedValueOnce(new Error('backend down'));
+    render(
+      <PoolPage poolPubkey={POOL} chainClient={mockChain()} fixtures={[fixture()]} nowTs={NOW} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Commit' }));
+
+    expect(await screen.findByText(/saved locally, will retry/i)).toBeTruthy();
+    expect(await screen.findByText('committed')).toBeTruthy(); // chain commit landed
+    const queue = JSON.parse(localStorage.getItem('acertana.pendingPicks') ?? '[]');
+    expect(queue).toHaveLength(1);
+    expect(queue[0]).toMatchObject({ poolPubkey: POOL, wallet: 'PARTICIPANT1', fixtureId: 1001 });
+  });
+
+  it('pending pick retried on page load; cleared on success', async () => {
+    const pending = {
+      poolPubkey: POOL,
+      wallet: 'PARTICIPANT1',
+      fixtureId: 1001,
+      homeGoals: 2,
+      awayGoals: 1,
+      saltHex: bytesToHex(SALT),
+    };
+    localStorage.setItem('acertana.pendingPicks', JSON.stringify([pending]));
+    render(
+      <PoolPage poolPubkey={POOL} chainClient={mockChain()} fixtures={[fixture()]} nowTs={NOW} />,
+    );
+    await waitFor(() => expect(postPick).toHaveBeenCalledWith(pending));
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem('acertana.pendingPicks') ?? '[]')).toHaveLength(0),
+    );
   });
 });

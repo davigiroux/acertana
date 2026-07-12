@@ -34,20 +34,40 @@ docs/DECISIONS.md        open design questions (resolve before implementing)
 ## Run
 
 ```sh
-# Program (devnet-configured; builds locally without a validator)
+# Program: build + full test suite (in-process SVM, no validator needed)
 anchor build
+cargo test -p acertana
+
+# Backend (join codes, roster, fixture authority, auto-reveal, leaderboard)
+cd backend
+npm install
+npm test               # includes an e2e reveal test against the real .so
+PICK_STORE_KEY=<64-hex> npm run dev
 
 # Frontend
 cd app
-cp .env.example .env   # fill VITE_PRIVY_APP_ID
+cp .env.example .env   # fill VITE_PRIVY_APP_ID, VITE_BACKEND_URL, VITE_RPC_URL
 npm install
+npm test
 npm run dev
 ```
 
 Note: Privy's embedded wallet needs HTTPS (localhost is exempt). Deploy to an
 HTTPS URL early for phone / local-network testing.
 
+## Security notes
+
+- `tests/fixtures/fixture-authority.json` is a PUBLISHED DEV KEY whose pubkey
+  is the hardcoded on-chain `FIXTURE_AUTHORITY`. Fine while local-only; MUST
+  be rotated (fresh keypair kept out of git + program upgrade) before any real
+  deploy.
+
 ## Status
 
-Scaffold only. All design decisions live in `docs/DECISIONS.md`; the build story
-so far is in `docs/BUILD_LOG.md`.
+Base app implemented per the design spec
+(`docs/superpowers/specs/2026-07-09-acertana-design-decisions-design.md`):
+program + tests, commit-reveal client lib, backend service, frontend flow,
+scoring/leaderboard. Build story: `docs/BUILD_LOG.md`; goal tracker:
+`docs/GOALS.md`. Historical open questions: `docs/DECISIONS.md` (all resolved
+in the spec). Still stubbed: real TxLINE endpoints, devnet deploy, live Privy
+login (see GOALS pre-blocks).

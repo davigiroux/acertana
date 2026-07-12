@@ -118,3 +118,53 @@ describe("revealWorker against the real program (bankrun)", () => {
     expect(await runRevealWorker(deps, kickoffTs + 10)).toBe(0);
   }, 60_000);
 });
+
+describe("revealWorker error isolation (mock send)", () => {
+  const KEY = Buffer.alloc(32, 9);
+  const KICKOFF = 1_000;
+
+  function seedDb(wallets: string[]) {
+    const db = openDb(":memory:");
+    const insert = db.prepare(
+      "INSERT INTO picks (pool_pubkey, wallet, fixture_id, ciphertext, revealed) VALUES (?, ?, ?, ?, 0)",
+    );
+    // Real base58 pubkeys required by revealPickIx.
+    const pool = Keypair.generate().publicKey.toBase58();
+    for (const w of wallets) {
+      insert.run(pool, w, 1001, encryptPick({ homeGoals: 2, awayGoals: 1, saltHex: "42".repeat(32) }, KEY));
+    }
+    return { db, pool };
+  }
+
+  it("a poison row does not block later rows", async () => {
+    const w1 = Keypair.generate().publicKey.toBase58();
+    const w2 = Keypair.generate().publicKey.toBase58();
+    const { db } = seedDb([w1, w2]);
+    let sent = 0;
+    const send: SendTransaction = async () => {
+      // Fail only the first row's tx.
+      if (sent++ === 0) throw new Error("Transaction simulation failed: missing Entry PDA");
+      return "sig";
+    };
+    const deps = { db, key: KEY, payer: Keypair.generate(), send, kickoffOf: () => KICKOFF };
+    expect(await runRevealWorker(deps, KICKOFF + 1)).toBe(1);
+    const rows = db.prepare("SELECT wallet, revealed FROM picks ORDER BY rowid").all() as {
+      wallet: string;
+      revealed: number;
+    }[];
+    expect(rows[0].revealed).toBe(0); // poison row stays unrevealed
+    expect(rows[1].revealed).toBe(1); // later row still processed
+  });
+
+  it("AlreadyRevealed error marks the row revealed (chain is source of truth)", async () => {
+    const w = Keypair.generate().publicKey.toBase58();
+    const { db } = seedDb([w]);
+    const send: SendTransaction = async () => {
+      throw new Error("custom program error: AlreadyRevealed (6004)");
+    };
+    const deps = { db, key: KEY, payer: Keypair.generate(), send, kickoffOf: () => KICKOFF };
+    expect(await runRevealWorker(deps, KICKOFF + 1)).toBe(0);
+    const row = db.prepare("SELECT revealed FROM picks").get() as { revealed: number };
+    expect(row.revealed).toBe(1);
+  });
+});
