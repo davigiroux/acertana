@@ -6,10 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-acertana = "22uyFYac9ehpM8SjcRFWJVSyQ3Uc4TAiZu4cTGwsxyAo"
-
-[registry]
-url = "https://api.apr.dev"
+acertana = "9hhdvFyxcW95p3bJMUij5Bsq1rrURK4EfTSjqYv4T5zn"
 
 [provider]
 cluster = "devnet"
@@ -17,3 +14,5 @@ wallet = "~/.config/solana/id.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+
+[hooks]

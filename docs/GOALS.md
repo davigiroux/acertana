@@ -23,7 +23,7 @@ authority = program constant (rotatable later). Local only — NO devnet deploy.
   bankrun-style harness, covering: happy path; commit at/after kickoff rejected;
   reveal before kickoff rejected; bad preimage rejected; duplicate entry
   rejected; wrong-authority register_fixture rejected.
-- Status: pending
+- Status: done — PR #2 (8 litesvm tests green)
 
 ## Goal 2 — Commit-reveal client lib
 

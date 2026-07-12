@@ -1,65 +1,132 @@
 //! Acertana — on-chain pick commitment for a free-to-play World Cup prediction
-//! pool. The chain's ONLY job is tamper-proof commitment of picks locked at
-//! kickoff. No token custody, no escrow, no staking, no transfers of value.
+//! pool. The chain's ONLY job is tamper-proof, kickoff-locked, copy-proof
+//! commitment of picks. No token custody, no escrow, no staking, no transfers
+//! of value.
 //!
-//! This is a SCAFFOLD: instructions compile but carry no logic. Every open
-//! design decision is a TODO pointing at docs/DECISIONS.md — do not guess them
-//! here.
+//! Design of record: docs/superpowers/specs/2026-07-09-acertana-design-decisions-design.md
 
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::keccak;
 
-declare_id!("22uyFYac9ehpM8SjcRFWJVSyQ3Uc4TAiZu4cTGwsxyAo");
+declare_id!("9hhdvFyxcW95p3bJMUij5Bsq1rrURK4EfTSjqYv4T5zn");
 
-/// Placeholder byte budget for picks until the pick encoding is decided.
-/// TODO(docs/DECISIONS.md#pick-data-model): replace with the real encoding size.
-pub const PICKS_PLACEHOLDER_LEN: usize = 64;
+/// Trusted authority allowed to register fixtures (kickoff times from TxLINE).
+/// Rotatable only by program upgrade for now (spec: out of scope beyond a
+/// single key). Keypair for local tests: tests/fixtures/fixture-authority.json.
+pub const FIXTURE_AUTHORITY: Pubkey = pubkey!("H83TTjZvtwWBVc18F3R3CecctPun6YcFv26UKTy9ozFk");
 
-/// Placeholder length for the pool name.
-/// TODO(docs/DECISIONS.md#pda-seed-design-and-account-sizing): confirm max length.
 pub const POOL_NAME_MAX_LEN: usize = 32;
 
 #[program]
 pub mod acertana {
     use super::*;
 
-    /// Create a prediction pool. Stub only — no validation, no config yet.
-    ///
-    /// TODO(docs/DECISIONS.md#pda-seed-design-and-account-sizing): PDA seeds.
-    /// TODO(docs/DECISIONS.md#pool-join-flow): how the share link references this pool.
-    pub fn create_pool(ctx: Context<CreatePool>, name: String) -> Result<()> {
-        let pool = &mut ctx.accounts.pool;
-        pool.organizer = ctx.accounts.organizer.key();
-        pool.name = name;
-        // TODO: tournament / scoring config (docs/DECISIONS.md#scoring-scheme).
+    /// Register a fixture's kickoff time. Fixture-authority only.
+    pub fn register_fixture(
+        ctx: Context<RegisterFixture>,
+        fixture_id: u64,
+        kickoff_ts: i64,
+    ) -> Result<()> {
+        require!(kickoff_ts > 0, AcertanaError::InvalidKickoff);
+        let fixture = &mut ctx.accounts.fixture;
+        fixture.fixture_id = fixture_id;
+        fixture.kickoff_ts = kickoff_ts;
+        fixture.bump = ctx.bumps.fixture;
         Ok(())
     }
 
-    /// Commit a participant's picks for a pool. Stub only.
-    ///
-    /// TODO(docs/DECISIONS.md#commit-strategy): plaintext picks vs commit-reveal.
-    /// TODO(docs/DECISIONS.md#pick-data-model): pick encoding (`picks` is an opaque
-    ///   placeholder blob until decided).
-    /// TODO(docs/DECISIONS.md#kickoff-lock-source): enforce the kickoff lock here —
-    ///   reject commits at/after the fixture's kickoff timestamp.
-    pub fn commit_picks(ctx: Context<CommitPicks>, picks: Vec<u8>) -> Result<()> {
+    /// Create a prediction pool (identity anchor; membership lives off-chain).
+    pub fn create_pool(ctx: Context<CreatePool>, pool_id: u64, name: String) -> Result<()> {
+        require!(name.len() <= POOL_NAME_MAX_LEN, AcertanaError::NameTooLong);
+        let pool = &mut ctx.accounts.pool;
+        pool.organizer = ctx.accounts.organizer.key();
+        pool.pool_id = pool_id;
+        pool.name = name;
+        pool.bump = ctx.bumps.pool;
+        Ok(())
+    }
+
+    /// Commit a hidden pick for one fixture. Rejected at/after kickoff.
+    /// `commitment = keccak(home_goals ‖ away_goals ‖ salt)`.
+    pub fn commit_pick(
+        ctx: Context<CommitPick>,
+        fixture_id: u64,
+        commitment: [u8; 32],
+    ) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        require!(
+            now < ctx.accounts.fixture.kickoff_ts,
+            AcertanaError::FixtureLocked
+        );
         let entry = &mut ctx.accounts.entry;
+        entry.pool = ctx.accounts.pool.key();
         entry.participant = ctx.accounts.participant.key();
-        entry.picks = picks;
-        // TODO: set/validate entry.locked_at against the fixture kickoff (on-chain check).
-        entry.locked_at = 0;
+        entry.fixture_id = fixture_id;
+        entry.commitment = commitment;
+        entry.revealed = false;
+        entry.home_goals = 0;
+        entry.away_goals = 0;
+        entry.bump = ctx.bumps.entry;
+        Ok(())
+    }
+
+    /// Reveal a pick after kickoff. Permissionless: the tx only proves the
+    /// hash preimage, so any payer may submit it (enables backend auto-reveal).
+    pub fn reveal_pick(
+        ctx: Context<RevealPick>,
+        home_goals: u8,
+        away_goals: u8,
+        salt: [u8; 32],
+    ) -> Result<()> {
+        let now = Clock::get()?.unix_timestamp;
+        require!(
+            now >= ctx.accounts.fixture.kickoff_ts,
+            AcertanaError::FixtureNotStarted
+        );
+        let entry = &mut ctx.accounts.entry;
+        require!(!entry.revealed, AcertanaError::AlreadyRevealed);
+        let mut preimage = [0u8; 34];
+        preimage[0] = home_goals;
+        preimage[1] = away_goals;
+        preimage[2..].copy_from_slice(&salt);
+        require!(
+            keccak::hash(&preimage).to_bytes() == entry.commitment,
+            AcertanaError::CommitmentMismatch
+        );
+        entry.revealed = true;
+        entry.home_goals = home_goals;
+        entry.away_goals = away_goals;
         Ok(())
     }
 }
 
 #[derive(Accounts)]
+#[instruction(fixture_id: u64)]
+pub struct RegisterFixture<'info> {
+    #[account(
+        init,
+        payer = authority,
+        space = Fixture::SPACE,
+        seeds = [b"fixture", fixture_id.to_le_bytes().as_ref()],
+        bump,
+    )]
+    pub fixture: Account<'info, Fixture>,
+
+    #[account(mut, address = FIXTURE_AUTHORITY @ AcertanaError::UnauthorizedFixtureAuthority)]
+    pub authority: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(pool_id: u64)]
 pub struct CreatePool<'info> {
-    /// TODO(docs/DECISIONS.md#pda-seed-design-and-account-sizing): this is a
-    /// placeholder sizing and a non-PDA init; replace with the decided seeds
-    /// and an exact space calculation.
     #[account(
         init,
         payer = organizer,
-        space = 8 + Pool::PLACEHOLDER_SPACE,
+        space = Pool::SPACE,
+        seeds = [b"pool", organizer.key().as_ref(), pool_id.to_le_bytes().as_ref()],
+        bump,
     )]
     pub pool: Account<'info, Pool>,
 
@@ -70,16 +137,27 @@ pub struct CreatePool<'info> {
 }
 
 #[derive(Accounts)]
-pub struct CommitPicks<'info> {
-    #[account(mut)]
+#[instruction(fixture_id: u64)]
+pub struct CommitPick<'info> {
     pub pool: Account<'info, Pool>,
 
-    /// TODO(docs/DECISIONS.md#pda-seed-design-and-account-sizing): should be a
-    /// PDA of (pool, participant) so each participant has exactly one entry.
+    #[account(
+        seeds = [b"fixture", fixture_id.to_le_bytes().as_ref()],
+        bump = fixture.bump,
+    )]
+    pub fixture: Account<'info, Fixture>,
+
     #[account(
         init,
         payer = participant,
-        space = 8 + Entry::PLACEHOLDER_SPACE,
+        space = Entry::SPACE,
+        seeds = [
+            b"entry",
+            pool.key().as_ref(),
+            participant.key().as_ref(),
+            fixture_id.to_le_bytes().as_ref(),
+        ],
+        bump,
     )]
     pub entry: Account<'info, Entry>,
 
@@ -89,31 +167,86 @@ pub struct CommitPicks<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// A prediction pool created by an organizer.
+#[derive(Accounts)]
+pub struct RevealPick<'info> {
+    #[account(
+        seeds = [b"fixture", entry.fixture_id.to_le_bytes().as_ref()],
+        bump = fixture.bump,
+    )]
+    pub fixture: Account<'info, Fixture>,
+
+    #[account(
+        mut,
+        seeds = [
+            b"entry",
+            entry.pool.as_ref(),
+            entry.participant.as_ref(),
+            entry.fixture_id.to_le_bytes().as_ref(),
+        ],
+        bump = entry.bump,
+    )]
+    pub entry: Account<'info, Entry>,
+}
+
+/// Global fixture registry entry: authoritative kickoff time for one match.
+#[account]
+pub struct Fixture {
+    pub fixture_id: u64,
+    pub kickoff_ts: i64,
+    pub bump: u8,
+}
+
+impl Fixture {
+    pub const SPACE: usize = 8 + 8 + 8 + 1; // 25
+}
+
+/// A prediction pool. Identity anchor only — roster/config live off-chain.
 #[account]
 pub struct Pool {
     pub organizer: Pubkey,
+    pub pool_id: u64,
     pub name: String,
-    // TODO(docs/DECISIONS.md): tournament reference + scoring config fields.
+    pub bump: u8,
 }
 
 impl Pool {
-    /// TODO(docs/DECISIONS.md#pda-seed-design-and-account-sizing): placeholder.
-    pub const PLACEHOLDER_SPACE: usize = 32 + 4 + POOL_NAME_MAX_LEN;
+    pub const SPACE: usize = 8 + 32 + 8 + (4 + POOL_NAME_MAX_LEN) + 1; // 85
 }
 
-/// One participant's committed picks in a pool.
+/// One participant's committed (then revealed) pick for one fixture.
+/// `pool` is stored (not only in seeds) so leaderboards can memcmp-filter
+/// getProgramAccounts by pool.
 #[account]
 pub struct Entry {
+    pub pool: Pubkey,
     pub participant: Pubkey,
-    /// Opaque pick blob. TODO(docs/DECISIONS.md#pick-data-model): real encoding.
-    pub picks: Vec<u8>,
-    /// Kickoff-lock field. TODO(docs/DECISIONS.md#kickoff-lock-source): semantics
-    /// (per-fixture lock vs single timestamp) and enforcement.
-    pub locked_at: i64,
+    pub fixture_id: u64,
+    pub commitment: [u8; 32],
+    pub revealed: bool,
+    /// Meaningful only when `revealed`.
+    pub home_goals: u8,
+    pub away_goals: u8,
+    pub bump: u8,
 }
 
 impl Entry {
-    /// TODO(docs/DECISIONS.md#pda-seed-design-and-account-sizing): placeholder.
-    pub const PLACEHOLDER_SPACE: usize = 32 + 4 + PICKS_PLACEHOLDER_LEN + 8;
+    pub const SPACE: usize = 8 + 32 + 32 + 8 + 32 + 1 + 1 + 1 + 1; // 116
+}
+
+#[error_code]
+pub enum AcertanaError {
+    #[msg("kickoff timestamp must be positive")]
+    InvalidKickoff,
+    #[msg("pool name exceeds 32 bytes")]
+    NameTooLong,
+    #[msg("fixture has kicked off; picks are locked")]
+    FixtureLocked,
+    #[msg("fixture has not kicked off; reveal not allowed yet")]
+    FixtureNotStarted,
+    #[msg("pick already revealed")]
+    AlreadyRevealed,
+    #[msg("reveal does not match the committed hash")]
+    CommitmentMismatch,
+    #[msg("signer is not the fixture authority")]
+    UnauthorizedFixtureAuthority,
 }
