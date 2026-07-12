@@ -45,7 +45,7 @@ describe('JoinPage', () => {
     expect(await screen.findByText(/Office Pool/)).toBeTruthy();
     expect(getJoinInfo).toHaveBeenCalledWith('ABC123');
 
-    fireEvent.click(screen.getByRole('button', { name: /log in/i }));
+    fireEvent.click(screen.getByRole('button', { name: /entrar com e-mail/i }));
     expect(walletState.login).toHaveBeenCalledOnce();
 
     // Simulate Privy finishing login + embedded wallet creation.

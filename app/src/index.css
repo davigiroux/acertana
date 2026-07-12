@@ -1,111 +1,470 @@
+/* Acertana design system — imported from claude.ai/design "Acertana.dc.html" */
+
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
-
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  --blue: #2b4bff;
+  --blue-hover: #1e39e6;
+  --blue-soft: #eaedff;
+  --blue-border: #dae0ff;
+  --ink: #0b0d12;
+  --text: #565c6e;
+  --muted: #8a90a0;
+  --faint: #9096a6;
+  --bg: #e9ecf2;
+  --surface: #f4f5f8;
+  --card-border: #eaecf2;
+  --line: #e7eaf1;
+  --input-border: #e1e4ec;
+  --input-bg: #f7f8fb;
+  --green: #15914f;
+  --green-dot: #22b265;
+  --amber-bg: #fbf8f1;
+  --amber-border: #eee4ce;
+  --amber-text: #9a7b23;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
+* {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
+  background: var(--bg);
+  font-family: 'Barlow', system-ui, sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
+a {
+  color: var(--blue);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--blue-hover);
+}
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+input {
+  font-family: inherit;
+}
+::selection {
+  background: #d6dcff;
 }
 
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+@keyframes acspin {
+  to {
+    transform: rotate(360deg);
   }
 }
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
+@keyframes acpulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
   }
 }
-p {
-  margin: 0;
+@keyframes acrise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+/* ── Shell ── */
+#root {
+  min-height: 100svh;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-code {
+.ac-phone {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border-inline: 1px solid var(--input-border);
+  overflow: hidden;
+}
+
+.ac-appbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(244, 245, 248, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ac-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ac-logo-mark {
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  border: 3px solid var(--blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ac-logo-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+}
+.ac-logo-word {
+  font-family: 'Barlow Condensed';
+  font-weight: 800;
+  font-size: 21px;
+  letter-spacing: 1px;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+.ac-invite-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  border: 1px solid var(--blue-border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.ac-invite-btn:hover {
+  background: #dde3ff;
+}
+
+/* ── Shared ── */
+.ac-condensed {
+  font-family: 'Barlow Condensed';
+}
+.ac-primary-btn {
+  width: 100%;
+  height: 52px;
+  border-radius: 14px;
+  border: none;
+  background: var(--blue);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  box-shadow: 0 8px 20px -8px rgba(43, 75, 255, 0.6);
+}
+.ac-primary-btn:hover {
+  background: var(--blue-hover);
+}
+.ac-spinner {
+  border-radius: 50%;
+  border: 3px solid #d8dcea;
+  border-top-color: var(--blue);
+  animation: acspin 0.7s linear infinite;
+}
+.ac-center-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 24px 26px;
+}
+.ac-icon-tile {
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  margin-bottom: 18px;
+}
+.ac-screen-title {
+  font-family: 'Barlow Condensed';
+  font-weight: 800;
+  font-size: 26px;
+  color: var(--ink);
+}
+.ac-screen-body {
   font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+  line-height: 1.45;
+  color: #6b7080;
+  margin: 8px 0 22px;
+  max-width: 280px;
+}
+.ac-card {
+  background: #fff;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(11, 13, 18, 0.04);
+}
+.ac-skel {
+  border-radius: 6px;
+  background: var(--line);
+  animation: acpulse 1.4s ease-in-out infinite;
+}
+
+/* ── Join ── */
+.ac-join {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 24px 22px 34px;
+  animation: acrise 0.3s ease both;
+}
+.ac-join-kicker {
+  font-family: 'Barlow Condensed';
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 1.6px;
+  color: var(--blue);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.ac-join-name {
+  font-family: 'Barlow Condensed';
+  font-weight: 800;
+  font-size: 42px;
+  line-height: 1;
+  color: var(--ink);
+  letter-spacing: -0.3px;
+}
+
+/* ── Pool ── */
+.ac-pool-header {
+  padding: 16px 16px 0;
+}
+.ac-pool-name {
+  font-family: 'Barlow Condensed';
+  font-weight: 800;
+  font-size: 27px;
+  line-height: 1.02;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.ac-points-chip {
+  flex: 0 0 auto;
+  background: var(--blue-soft);
+  border: 1px solid var(--blue-border);
+  border-radius: 14px;
+  padding: 8px 14px;
+  text-align: center;
+  min-width: 66px;
+}
+.ac-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 16px 16px 0;
+  border-bottom: 1px solid var(--line);
+  margin-top: 14px;
+}
+.ac-tab {
+  flex: 1;
+  height: 42px;
+  border: none;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 700;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--faint);
+}
+.ac-tab.active {
+  color: var(--blue);
+  border-color: var(--blue);
+}
+
+.ac-date-label {
+  font-family: 'Barlow Condensed';
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--faint);
+}
+
+/* ── Fixture cards ── */
+.ac-fx-time {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.ac-badge-open {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--green);
+  text-transform: uppercase;
+}
+.ac-badge-open::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green-dot);
+}
+.ac-badge-saved {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--blue-soft);
+  color: var(--blue);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.ac-badge-late {
+  background: #f5ead2;
+  color: var(--amber-text);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.ac-fx-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 0;
+}
+.ac-fx-flag {
+  font-size: 24px;
+}
+.ac-fx-team {
+  flex: 1;
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--ink);
+}
+.ac-fx-divider {
+  height: 1px;
+  background: #f1f2f6;
+}
+.ac-step-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--ink);
+  font-size: 19px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ac-step-btn:hover:not(:disabled) {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.ac-step-val {
+  min-width: 26px;
+  text-align: center;
+  font-family: 'Barlow Condensed';
+  font-weight: 800;
+  font-size: 28px;
+  color: var(--ink);
+}
+.ac-score-box {
+  min-width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: #f2f4f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Barlow Condensed';
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--ink);
+}
+.ac-commit-btn {
+  width: 100%;
+  margin-top: 12px;
+  height: 48px;
+  border-radius: 12px;
+  border: none;
+  background: var(--blue);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+.ac-commit-btn:hover:not(:disabled) {
+  background: var(--blue-hover);
+}
+.ac-commit-btn:disabled {
+  opacity: 0.8;
+  cursor: default;
+}
+.ac-fx-footnote {
+  text-align: center;
+  margin-top: 9px;
+  font-size: 11.5px;
+  color: var(--faint);
+  font-weight: 500;
+}
+.ac-fx-error {
+  margin-top: 11px;
+  background: #fdecec;
+  border: 1px solid #f6cacb;
+  color: #c0362f;
+  border-radius: 10px;
+  padding: 8px 11px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ac-btn-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  animation: acspin 0.7s linear infinite;
+}
+
+/* ── Toast ── */
+.ac-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  transform: translateX(-50%);
+  z-index: 60;
+  background: var(--ink);
+  color: #fff;
+  padding: 11px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 12px 30px -8px rgba(0, 0, 0, 0.45);
+  animation: acrise 0.25s ease both;
+  white-space: nowrap;
 }

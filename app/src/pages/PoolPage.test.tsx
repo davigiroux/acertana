@@ -68,13 +68,11 @@ describe('PoolPage', () => {
       <PoolPage poolPubkey={POOL} chainClient={chain} fixtures={[fixture()]} nowTs={NOW} />,
     );
 
-    fireEvent.change(screen.getByLabelText('Mexico vs Poland home goals'), {
-      target: { value: '2' },
-    });
-    fireEvent.change(screen.getByLabelText('Mexico vs Poland away goals'), {
-      target: { value: '1' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Commit' }));
+    const plusHome = screen.getByRole('button', { name: 'Mexico vs Poland home goals plus' });
+    fireEvent.click(plusHome);
+    fireEvent.click(plusHome);
+    fireEvent.click(screen.getByRole('button', { name: 'Mexico vs Poland away goals plus' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar palpite' }));
 
     await waitFor(() => expect(postPick).toHaveBeenCalled());
 
@@ -103,7 +101,7 @@ describe('PoolPage', () => {
     }, 'test-token');
 
     // Marked committed in the UI.
-    expect(await screen.findByText('committed')).toBeTruthy();
+    expect(await screen.findByText(/Palpite salvo/)).toBeTruthy();
   });
 
   it('locked after kickoff: no inputs, no commit button', async () => {
@@ -115,9 +113,8 @@ describe('PoolPage', () => {
         nowTs={NOW}
       />,
     );
-    expect(await screen.findByText('locked')).toBeTruthy();
-    expect(screen.queryByRole('spinbutton')).toBeNull();
-    expect(screen.queryByRole('button', { name: /commit/i })).toBeNull();
+    expect(await screen.findByText('Prazo encerrado')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /salvar palpite/i })).toBeNull();
   });
 
   it('revealed entry renders the score', async () => {
@@ -130,9 +127,9 @@ describe('PoolPage', () => {
         nowTs={NOW}
       />,
     );
-    expect(await screen.findByText(/Revealed: 3 – 2/)).toBeTruthy();
+    expect(await screen.findByText(/Seu palpite: 3 – 2/)).toBeTruthy();
     expect(chain.getEntry).toHaveBeenCalledWith(POOL, 'PARTICIPANT1', 1001n);
-    expect(screen.queryByRole('spinbutton')).toBeNull();
+    expect(screen.queryByRole('button', { name: /salvar palpite/i })).toBeNull();
   });
 
   it('committed entry: marker only, no re-commit affordance (Entry is init-only)', async () => {
@@ -140,9 +137,8 @@ describe('PoolPage', () => {
     render(
       <PoolPage poolPubkey={POOL} chainClient={chain} fixtures={[fixture()]} nowTs={NOW} />,
     );
-    expect(await screen.findByText('committed')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /commit/i })).toBeNull();
-    expect(screen.queryByRole('spinbutton')).toBeNull();
+    expect(await screen.findByText(/Palpite salvo/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /salvar palpite/i })).toBeNull();
   });
 
   it('failed postPick after commit: queued in localStorage, saved-locally notice', async () => {
@@ -150,10 +146,10 @@ describe('PoolPage', () => {
     render(
       <PoolPage poolPubkey={POOL} chainClient={mockChain()} fixtures={[fixture()]} nowTs={NOW} />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Commit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar palpite' }));
 
     expect(await screen.findByText(/saved locally, will retry/i)).toBeTruthy();
-    expect(await screen.findByText('committed')).toBeTruthy(); // chain commit landed
+    expect(await screen.findByText(/Palpite salvo/)).toBeTruthy(); // chain commit landed
     const queue = JSON.parse(localStorage.getItem('acertana.pendingPicks') ?? '[]');
     expect(queue).toHaveLength(1);
     expect(queue[0]).toMatchObject({ poolPubkey: POOL, wallet: 'PARTICIPANT1', fixtureId: 1001 });
