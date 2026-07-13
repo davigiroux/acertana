@@ -142,6 +142,24 @@ describe("POST /faucet", () => {
   });
 });
 
+describe("DELETE /admin/fixtures/:id", () => {
+  it("is guarded and deletes the row", async () => {
+    const db = openDb(":memory:");
+    upsertFixtures(db, [{ fixtureId: 9, home: "A", away: "B", kickoffTs: 1 }], 1);
+    const app = buildServer({ db, pickKey: KEY, adminToken: "s3cret" });
+    expect(
+      (await app.inject({ method: "DELETE", url: "/admin/fixtures/9" })).statusCode,
+    ).toBe(401);
+    const ok = await app.inject({
+      method: "DELETE",
+      url: "/admin/fixtures/9",
+      headers: { "x-admin-token": "s3cret" },
+    });
+    expect(ok.json()).toEqual({ deleted: 1 });
+    expect((await app.inject({ method: "GET", url: "/fixtures" })).json().fixtures).toEqual([]);
+  });
+});
+
 describe("POST /admin/results", () => {
   it("is 404 when not enabled, guarded when enabled, and feeds the store", async () => {
     const store = new ResultsStore(() => 42);

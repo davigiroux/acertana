@@ -187,6 +187,22 @@ export function buildServer({
     return { ok: true };
   });
 
+  // Remove a fixture from the local table (admin cleanup — e.g. rows synced
+  // before a competition filter was applied). On-chain Fixture accounts are
+  // permanent; this only affects what /fixtures serves and the reveal worker.
+  app.delete<{ Params: { fixtureId: string } }>(
+    "/admin/fixtures/:fixtureId",
+    async (req, reply) => {
+      if (!adminToken) return reply.code(404).send({ error: "not enabled" });
+      if (req.headers["x-admin-token"] !== adminToken) {
+        return reply.code(401).send({ error: "bad admin token" });
+      }
+      const id = Number(req.params.fixtureId);
+      const info = db.prepare("DELETE FROM fixtures WHERE fixture_id = ?").run(id);
+      return { deleted: info.changes };
+    },
+  );
+
   // Manual result injection (demos; fixtures outside the live feed's coverage).
   app.post<{
     Body: { fixtureId?: number; homeGoals?: number; awayGoals?: number; final?: boolean };
