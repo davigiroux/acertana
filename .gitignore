@@ -9,3 +9,5 @@ dist/
 test-ledger/
 .playwright-mcp/
 .keys/
+*.png
+!app/src/assets/*.png
