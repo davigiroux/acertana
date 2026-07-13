@@ -51,7 +51,8 @@ function fixture(overrides: Partial<Fixture> = {}): Fixture {
 function mockChain(entry: Awaited<ReturnType<ChainClient['getEntry']>> = null): ChainClient {
   return {
     commitPick: vi.fn(async () => 'SIG'),
-    getEntry: vi.fn(async () => entry),
+    createPool: vi.fn(async () => 'POOLPDA1'),
+  getEntry: vi.fn(async () => entry),
   };
 }
 

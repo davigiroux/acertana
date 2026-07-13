@@ -14,10 +14,12 @@ const verifyWallet = async (header: string | undefined, wallet: string) =>
   header === "Bearer good" && wallet === "OwnedWallet";
 
 function createPool(app: FastifyInstance) {
+  // OwnedWallet + good token so the helper works when a verifier is configured.
   return app.inject({
     method: "POST",
     url: "/pools",
-    payload: { name: "p", organizer: "o", poolPubkey: POOL },
+    headers: { authorization: "Bearer good" },
+    payload: { name: "p", organizer: "OwnedWallet", poolPubkey: POOL },
   });
 }
 
@@ -88,6 +90,73 @@ describe("wallet auth", () => {
       payload: { wallet: "AnyWallet" },
     });
     expect(res.statusCode).toBe(200);
+  });
+});
+
+describe("POST /pools auth", () => {
+  it("rejects pool creation for organizers the token does not own", async () => {
+    const app = buildServer({ db: openDb(":memory:"), pickKey: KEY, verifyWallet });
+    const res = await app.inject({
+      method: "POST",
+      url: "/pools",
+      headers: { authorization: "Bearer good" },
+      payload: { name: "p", organizer: "SomeoneElse", poolPubkey: POOL },
+    });
+    expect(res.statusCode).toBe(401);
+    expect((await createPool(app)).statusCode).toBe(201);
+  });
+});
+
+describe("POST /faucet", () => {
+  it("404 when not configured, auth-gated, calls the faucet", async () => {
+    const closed = buildServer({ db: openDb(":memory:"), pickKey: KEY });
+    expect(
+      (await closed.inject({ method: "POST", url: "/faucet", payload: { wallet: "w" } }))
+        .statusCode,
+    ).toBe(404);
+
+    const topped: string[] = [];
+    const app = buildServer({
+      db: openDb(":memory:"),
+      pickKey: KEY,
+      verifyWallet,
+      faucet: async (w) => {
+        topped.push(w);
+      },
+    });
+    const bad = await app.inject({
+      method: "POST",
+      url: "/faucet",
+      headers: { authorization: "Bearer good" },
+      payload: { wallet: "SomeoneElse" },
+    });
+    expect(bad.statusCode).toBe(401);
+    const ok = await app.inject({
+      method: "POST",
+      url: "/faucet",
+      headers: { authorization: "Bearer good" },
+      payload: { wallet: "OwnedWallet" },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(topped).toEqual(["OwnedWallet"]);
+  });
+});
+
+describe("DELETE /admin/fixtures/:id", () => {
+  it("is guarded and deletes the row", async () => {
+    const db = openDb(":memory:");
+    upsertFixtures(db, [{ fixtureId: 9, home: "A", away: "B", kickoffTs: 1 }], 1);
+    const app = buildServer({ db, pickKey: KEY, adminToken: "s3cret" });
+    expect(
+      (await app.inject({ method: "DELETE", url: "/admin/fixtures/9" })).statusCode,
+    ).toBe(401);
+    const ok = await app.inject({
+      method: "DELETE",
+      url: "/admin/fixtures/9",
+      headers: { "x-admin-token": "s3cret" },
+    });
+    expect(ok.json()).toEqual({ deleted: 1 });
+    expect((await app.inject({ method: "GET", url: "/fixtures" })).json().fixtures).toEqual([]);
   });
 });
 

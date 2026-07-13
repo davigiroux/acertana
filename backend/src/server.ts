@@ -17,6 +17,8 @@ export interface ServerDeps {
   verifyWallet?: WalletVerifier;
   /** When set, enables POST /admin/results guarded by the x-admin-token header. */
   adminToken?: string;
+  /** Tops up a wallet with dust for tx fees (devnet UX — invisible wallets start empty). */
+  faucet?: (wallet: string) => Promise<void>;
 }
 
 export function buildServer({
@@ -26,6 +28,7 @@ export function buildServer({
   resultsStore,
   verifyWallet,
   adminToken,
+  faucet,
 }: ServerDeps): FastifyInstance {
   const app = Fastify();
 
@@ -45,6 +48,9 @@ export function buildServer({
       const { name, organizer, poolPubkey } = req.body ?? {};
       if (!name || !organizer || !poolPubkey) {
         return reply.code(400).send({ error: "name, organizer, poolPubkey required" });
+      }
+      if (verifyWallet && !(await verifyWallet(req.headers.authorization, organizer))) {
+        return reply.code(401).send({ error: "invalid auth token for organizer" });
       }
       const joinCode = insertPoolWithJoinCode(db, { poolPubkey, name, organizer });
       return reply.code(201).send({ joinCode, poolPubkey });
@@ -166,6 +172,36 @@ export function buildServer({
     ).run(poolPubkey, wallet, fixtureId, encryptPick(payload, pickKey));
     return reply.code(201).send({ ok: true });
   });
+
+  // Fee top-up for invisible wallets (they start with 0 SOL; commit/create
+  // txs are payer-funded). Auth-gated; the implementation rate-limits by
+  // checking the wallet's current balance.
+  app.post<{ Body: { wallet?: string } }>("/faucet", async (req, reply) => {
+    if (!faucet) return reply.code(404).send({ error: "not enabled" });
+    const { wallet } = req.body ?? {};
+    if (!wallet) return reply.code(400).send({ error: "wallet required" });
+    if (verifyWallet && !(await verifyWallet(req.headers.authorization, wallet))) {
+      return reply.code(401).send({ error: "invalid auth token for wallet" });
+    }
+    await faucet(wallet);
+    return { ok: true };
+  });
+
+  // Remove a fixture from the local table (admin cleanup — e.g. rows synced
+  // before a competition filter was applied). On-chain Fixture accounts are
+  // permanent; this only affects what /fixtures serves and the reveal worker.
+  app.delete<{ Params: { fixtureId: string } }>(
+    "/admin/fixtures/:fixtureId",
+    async (req, reply) => {
+      if (!adminToken) return reply.code(404).send({ error: "not enabled" });
+      if (req.headers["x-admin-token"] !== adminToken) {
+        return reply.code(401).send({ error: "bad admin token" });
+      }
+      const id = Number(req.params.fixtureId);
+      const info = db.prepare("DELETE FROM fixtures WHERE fixture_id = ?").run(id);
+      return { deleted: info.changes };
+    },
+  );
 
   // Manual result injection (demos; fixtures outside the live feed's coverage).
   app.post<{

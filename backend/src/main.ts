@@ -1,4 +1,4 @@
-import { Connection } from "@solana/web3.js";
+import { Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
 import { openDb } from "./db.js";
 import { loadKey } from "./crypto.js";
 import { buildServer } from "./server.js";
@@ -73,6 +73,20 @@ const app = buildServer({
   resultsStore,
   verifyWallet,
   adminToken: process.env.ADMIN_TOKEN,
+  // Devnet fee faucet: top up empty invisible wallets from the authority key
+  // so their create/commit txs can pay fees. No-ops when already funded.
+  faucet: async (wallet) => {
+    const target = new PublicKey(wallet);
+    const min = Number(process.env.FAUCET_MIN_LAMPORTS ?? 0.005 * LAMPORTS_PER_SOL);
+    const topUp = Number(process.env.FAUCET_TOPUP_LAMPORTS ?? 0.02 * LAMPORTS_PER_SOL);
+    if ((await connection.getBalance(target)) >= min) return;
+    const payer = loadFixtureAuthority();
+    const tx = new Transaction().add(
+      SystemProgram.transfer({ fromPubkey: payer.publicKey, toPubkey: target, lamports: topUp }),
+    );
+    await sendViaConnection(connection)(tx, [payer]);
+    console.log(`faucet: topped up ${wallet}`);
+  },
 });
 
 // Auto-reveal worker (design §2): decrypt stored picks past kickoff and submit

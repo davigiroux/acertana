@@ -4,7 +4,7 @@ import {
   Transaction,
   type VersionedTransaction,
 } from '@solana/web3.js';
-import { commitPickIx, decodeEntry, entryPda, type EntryState } from './program';
+import { commitPickIx, createPoolIx, decodeEntry, entryPda, poolPda, type EntryState } from './program';
 
 export type { EntryState };
 
@@ -28,6 +28,13 @@ export interface ChainClient {
   }): Promise<string>;
   /** Fetch + decode the Entry PDA, or null if not created yet. */
   getEntry(pool: string, participant: string, fixtureId: bigint): Promise<EntryState | null>;
+  /** Build, sign, and send create_pool. Resolves to the pool PDA address. */
+  createPool(args: {
+    organizer: string;
+    poolId: bigint;
+    name: string;
+    signTransaction: TransactionSigner;
+  }): Promise<string>;
 }
 
 export function rpcUrl(): string {
@@ -54,6 +61,20 @@ export function createChainClient(connection?: Connection): ChainClient {
       const sig = await conn().sendRawTransaction(signed.serialize());
       await conn().confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
       return sig;
+    },
+    async createPool({ organizer, poolId, name, signTransaction }) {
+      const organizerPk = new PublicKey(organizer);
+      const ix = createPoolIx(organizerPk, poolId, name);
+      const { blockhash, lastValidBlockHeight } = await conn().getLatestBlockhash();
+      const tx = new Transaction({
+        feePayer: organizerPk,
+        blockhash,
+        lastValidBlockHeight,
+      }).add(ix);
+      const signed = await signTransaction(tx);
+      const sig = await conn().sendRawTransaction(signed.serialize());
+      await conn().confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight });
+      return poolPda(organizerPk, poolId).toBase58();
     },
     async getEntry(pool, participant, fixtureId) {
       const pda = entryPda(new PublicKey(pool), new PublicKey(participant), fixtureId);

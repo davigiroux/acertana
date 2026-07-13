@@ -51,6 +51,7 @@ export function PoolPage({
   const { authenticated, ready, address, wallet, login, getAccessToken } = useInvisibleWallet();
   const chain = useMemo(() => chainClient ?? createChainClient(), [chainClient]);
   const [fixtures, setFixtures] = useState<Fixture[] | null>(fixturesProp ?? null);
+  const [fixturesError, setFixturesError] = useState<string | null>(null);
   const [entries, setEntries] = useState<Record<number, EntryState | null>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useState<'jogos' | 'ranking'>('jogos');
@@ -65,7 +66,9 @@ export function PoolPage({
   useEffect(() => {
     if (fixturesProp) return;
     let cancelled = false;
-    getFixtures().then((f) => !cancelled && setFixtures(f));
+    getFixtures()
+      .then((f) => !cancelled && setFixtures(f))
+      .catch((e) => !cancelled && setFixturesError(String((e as Error).message ?? e)));
     return () => {
       cancelled = true;
     };
@@ -153,6 +156,15 @@ export function PoolPage({
         >
           Entrar com e-mail
         </button>
+      </div>
+    );
+  }
+  if (fixturesError) {
+    return (
+      <div className="ac-center-screen">
+        <div className="ac-icon-tile" style={{ background: '#FBF0DE' }}>⚠️</div>
+        <div className="ac-screen-title" style={{ fontSize: 24 }}>Não foi possível carregar os jogos</div>
+        <p className="ac-screen-body" role="alert">{fixturesError}</p>
       </div>
     );
   }
