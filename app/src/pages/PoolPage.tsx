@@ -12,6 +12,27 @@ import {
 import { useInvisibleWallet } from '../lib/wallet/useInvisibleWallet';
 import { FixtureRow } from './FixtureRow';
 
+function dateGroups(fixtures: Fixture[]): { label: string; items: Fixture[] }[] {
+  const groups: { key: string; label: string; items: Fixture[] }[] = [];
+  for (const f of fixtures) {
+    const d = new Date(f.kickoffTs * 1000);
+    const key = d.toLocaleDateString('pt-BR');
+    const wd = d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').toUpperCase();
+    const mo = d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase();
+    let g = groups.find((g) => g.key === key);
+    if (!g) {
+      g = { key, label: `${wd} · ${d.getDate()} ${mo}`, items: [] };
+      groups.push(g);
+    }
+    g.items.push(f);
+  }
+  return groups;
+}
+
+function shortPubkey(pk: string): string {
+  return pk.length > 12 ? `${pk.slice(0, 4)}…${pk.slice(-4)}` : pk;
+}
+
 /**
  * /p/:poolPubkey — fixture list with commit-pick flow.
  * `chainClient`, `fixtures`, and `nowTs` are injectable for tests.
@@ -32,6 +53,7 @@ export function PoolPage({
   const [fixtures, setFixtures] = useState<Fixture[] | null>(fixturesProp ?? null);
   const [entries, setEntries] = useState<Record<number, EntryState | null>>({});
   const [notice, setNotice] = useState<string | null>(null);
+  const [tab, setTab] = useState<'jogos' | 'ranking'>('jogos');
 
   // Retry payload uploads that failed after their on-chain commit landed.
   useEffect(() => {
@@ -118,30 +140,98 @@ export function PoolPage({
 
   if (!authenticated) {
     return (
-      <section>
-        <h2>Pool</h2>
-        <button onClick={login}>Log in with email</button>
-      </section>
+      <div className="ac-center-screen">
+        <div className="ac-icon-tile" style={{ background: 'var(--blue-soft)', fontSize: 28 }}>🔒</div>
+        <div className="ac-screen-title" style={{ fontSize: 24 }}>Entre para ver o bolão</div>
+        <p className="ac-screen-body">
+          Faça login com seu e-mail para ver os jogos, palpitar e acompanhar o ranking.
+        </p>
+        <button
+          className="ac-primary-btn"
+          style={{ width: 'auto', height: 48, padding: '0 24px', fontSize: 15 }}
+          onClick={login}
+        >
+          Entrar com e-mail
+        </button>
+      </div>
     );
   }
-  if (!ready || !address) return <p>Preparing wallet…</p>;
-  if (!fixtures) return <p>Loading fixtures…</p>;
+  if (!ready || !address || !fixtures) {
+    return (
+      <div className="ac-center-screen">
+        <div className="ac-spinner" style={{ width: 26, height: 26, marginBottom: 18 }} />
+        <div style={{ fontSize: 15, fontWeight: 600, color: '#6B7080' }}>
+          {!ready || !address ? 'Preparando carteira…' : 'Carregando jogos…'}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <section>
-      <h2>Pool {poolPubkey}</h2>
-      {notice && <p role="status">{notice}</p>}
-      <ul>
-        {fixtures.map((f) => (
-          <FixtureRow
-            key={f.fixtureId}
-            fixture={f}
-            entry={entries[f.fixtureId] ?? null}
-            nowTs={nowTs}
-            onCommit={commit}
-          />
-        ))}
-      </ul>
-    </section>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div className="ac-pool-header">
+        <div className="ac-pool-name">Bolão {shortPubkey(poolPubkey)}</div>
+      </div>
+
+      <div className="ac-tabs">
+        <button className={`ac-tab${tab === 'jogos' ? ' active' : ''}`} onClick={() => setTab('jogos')}>
+          Jogos
+        </button>
+        <button className={`ac-tab${tab === 'ranking' ? ' active' : ''}`} onClick={() => setTab('ranking')}>
+          Ranking
+        </button>
+      </div>
+
+      {tab === 'jogos' && (
+        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {dateGroups(fixtures).map((g) => (
+            <div key={g.label}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 11 }}>
+                <span className="ac-date-label">{g.label}</span>
+                <span style={{ height: 1, flex: 1, background: 'var(--line)' }} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+                {g.items.map((f) => (
+                  <FixtureRow
+                    key={f.fixtureId}
+                    fixture={f}
+                    entry={entries[f.fixtureId] ?? null}
+                    nowTs={nowTs}
+                    onCommit={commit}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'ranking' && (
+        <div style={{ padding: 16 }}>
+          {/* TODO(docs/DECISIONS.md#leaderboard-computation): live standings from the score stream. */}
+          <div
+            className="ac-card"
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '40px 24px' }}
+          >
+            <div style={{ fontSize: 34, opacity: 0.35, marginBottom: 12 }}>🏆</div>
+            <div className="ac-condensed" style={{ fontWeight: 800, fontSize: 20, color: 'var(--ink)' }}>
+              Ninguém pontuou ainda
+            </div>
+            <p style={{ fontSize: 14, lineHeight: 1.4, color: 'var(--muted)', margin: '6px 0 0', maxWidth: 250 }}>
+              O ranking aparece assim que o primeiro jogo terminar. Faça seus palpites!
+            </p>
+          </div>
+          <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--faint)', marginTop: 12 }}>
+            5 pts placar exato · 3 pts saldo de gols · 1 pt vencedor
+          </div>
+        </div>
+      )}
+
+      {notice && (
+        <div className="ac-toast" role="status">
+          {notice}
+        </div>
+      )}
+    </div>
   );
 }
