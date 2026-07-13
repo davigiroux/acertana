@@ -34,6 +34,37 @@ export async function postJoin(
   if (!res.ok) throw new Error(`join failed (${res.status})`);
 }
 
+export interface CreatePoolResult {
+  joinCode: string;
+  poolPubkey: string;
+}
+
+/** Register a freshly created on-chain pool; backend mints the join code. */
+export async function postCreatePool(
+  name: string,
+  organizer: string,
+  poolPubkey: string,
+  accessToken?: string,
+): Promise<CreatePoolResult> {
+  const res = await fetch(`${backendUrl()}/pools`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...authHeaders(accessToken) },
+    body: JSON.stringify({ name, organizer, poolPubkey }),
+  });
+  if (!res.ok) throw new Error(`pool registration failed (${res.status})`);
+  return res.json();
+}
+
+/** Ask the backend to top up the wallet with fee dust (devnet UX). */
+export async function postFaucet(wallet: string, accessToken?: string): Promise<void> {
+  const res = await fetch(`${backendUrl()}/faucet`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...authHeaders(accessToken) },
+    body: JSON.stringify({ wallet }),
+  });
+  if (!res.ok) throw new Error(`faucet failed (${res.status})`);
+}
+
 export interface PickPayload {
   poolPubkey: string;
   wallet: string;

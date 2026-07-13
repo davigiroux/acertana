@@ -1,3 +1,4 @@
+import { CreatePoolPage } from './pages/CreatePoolPage'
 import { JoinPage } from './pages/JoinPage'
 import { PoolPage } from './pages/PoolPage'
 import { matchRoute, navigate, usePath } from './lib/router'
@@ -14,6 +15,7 @@ function App() {
           <span className="ac-logo-word">Acertana</span>
         </div>
       </header>
+      {route.name === 'create' && <CreatePoolPage />}
       {route.name === 'join' && <JoinPage code={route.code} />}
       {route.name === 'pool' && <PoolPage poolPubkey={route.poolPubkey} />}
       {route.name === 'home' && (
@@ -24,6 +26,13 @@ function App() {
             Palpite nos placares da Copa antes do apito e dispute o ranking com a galera. Abra um
             link de convite <code>/j/CODIGO</code> para entrar em um bolão.
           </p>
+          <button
+            className="ac-primary-btn"
+            style={{ width: 'auto', height: 48, padding: '0 24px', fontSize: 15 }}
+            onClick={() => navigate('/novo')}
+          >
+            Criar um bolão
+          </button>
         </div>
       )}
       {route.name === 'notFound' && (
