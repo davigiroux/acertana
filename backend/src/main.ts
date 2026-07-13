@@ -5,15 +5,28 @@ import { buildServer } from "./server.js";
 import { ChainEntryProvider } from "./leaderboard.js";
 import { ResultsStore } from "./results.js";
 import { loadFixtures, scoreEvents } from "./txline/stub.js";
+import { TxlineClient } from "./txline/client.js";
 import { loadFixtureAuthority, sendViaConnection } from "./fixtureAuthority.js";
 import { runRevealWorker } from "./revealWorker.js";
 
 const connection = new Connection(process.env.RPC_URL ?? "http://127.0.0.1:8899", "confirmed");
 const resultsStore = new ResultsStore();
-// Real TxLINE SSE stream is TODO; the fake stub feed is opt-in only, otherwise
-// the results store starts empty and the leaderboard is provisional-empty.
+// Score feed precedence: opt-in stub for local dev; else the real TxLINE SSE
+// stream when an API token is configured (mint one with `npm run
+// txline-subscribe`); else the store starts empty (leaderboard shows zeros).
 if (process.env.TXLINE_STUB === "1") {
   resultsStore.consume(scoreEvents()).catch((err) => console.error("score feed failed", err));
+} else if (process.env.TXLINE_API_TOKEN) {
+  const txline = new TxlineClient({
+    apiOrigin: process.env.TXLINE_API_ORIGIN ?? "https://txline-dev.txodds.com",
+    apiToken: process.env.TXLINE_API_TOKEN,
+    competitionId: process.env.TXLINE_COMPETITION_ID
+      ? Number(process.env.TXLINE_COMPETITION_ID)
+      : undefined,
+  });
+  resultsStore
+    .consume(txline.scoreEvents())
+    .catch((err) => console.error("txline score feed failed", err));
 }
 
 const db = openDb();
