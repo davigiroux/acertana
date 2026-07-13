@@ -5,6 +5,7 @@ import { JoinPage } from './JoinPage';
 
 const walletState = {
   authenticated: false,
+  getAccessToken: async () => 'test-token',
   ready: false,
   address: null as string | null,
   wallet: null,
@@ -51,7 +52,7 @@ describe('JoinPage', () => {
     Object.assign(walletState, { authenticated: true, ready: true, address: 'WALLET111' });
     rerender(<JoinPage code="ABC123" />);
 
-    await waitFor(() => expect(postJoin).toHaveBeenCalledWith('POOLPUBKEY', 'WALLET111'));
+    await waitFor(() => expect(postJoin).toHaveBeenCalledWith('POOLPUBKEY', 'WALLET111', 'test-token'));
     await waitFor(() => expect(window.location.pathname).toBe('/p/POOLPUBKEY'));
   });
 

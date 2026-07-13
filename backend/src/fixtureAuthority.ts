@@ -6,11 +6,17 @@ import { loadFixtures, type Fixture } from "./txline/stub.js";
 /**
  * Fixture authority: the backend key allowed to call register_fixture.
  * Local/test keypair lives at tests/fixtures/fixture-authority.json.
+ *
+ * Sources, in order: FIXTURE_AUTHORITY_KEYPAIR_B64 (base64 of the keypair
+ * json — for hosts like Railway where a secret file is awkward), then
+ * FIXTURE_AUTHORITY_KEYPAIR (path), then the local test key.
  */
 export function loadFixtureAuthority(
   path = process.env.FIXTURE_AUTHORITY_KEYPAIR ?? "../tests/fixtures/fixture-authority.json",
 ): Keypair {
-  const secret = JSON.parse(readFileSync(path, "utf8")) as number[];
+  const b64 = process.env.FIXTURE_AUTHORITY_KEYPAIR_B64;
+  const json = b64 ? Buffer.from(b64, "base64").toString("utf8") : readFileSync(path, "utf8");
+  const secret = JSON.parse(json) as number[];
   return Keypair.fromSecretKey(Uint8Array.from(secret));
 }
 

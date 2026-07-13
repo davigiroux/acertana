@@ -1,9 +1,9 @@
+import { backendUrl } from './api';
+
 /**
- * Fixture list for the pool page.
- *
- * TODO(real endpoint): the backend has no GET fixtures route yet
- * (see backend/src/server.ts). This mirrors backend/fixtures.seed.json;
- * replace with a fetch once the endpoint exists.
+ * Fixture list for the pool page, fetched from the backend (which syncs it
+ * from TxLINE, or from the dev seed under TXLINE_STUB). FIXTURES below is a
+ * static fallback for tests and offline dev.
  */
 export interface Fixture {
   fixtureId: number;
@@ -24,6 +24,15 @@ export const FIXTURES: Fixture[] = [
 ];
 
 export async function getFixtures(): Promise<Fixture[]> {
-  // TODO(real endpoint): fetch `${VITE_BACKEND_URL}/fixtures` when added.
-  return FIXTURES;
+  try {
+    const res = await fetch(`${backendUrl()}/fixtures`);
+    if (!res.ok) throw new Error(`fixtures fetch failed (${res.status})`);
+    const { fixtures } = (await res.json()) as { fixtures: Fixture[] };
+    if (fixtures.length > 0) return fixtures;
+    console.warn('backend returned no fixtures; falling back to static seed');
+    return FIXTURES;
+  } catch (err) {
+    console.warn('fixtures fetch failed; falling back to static seed', err);
+    return FIXTURES;
+  }
 }
