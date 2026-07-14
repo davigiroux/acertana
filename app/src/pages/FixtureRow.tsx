@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import type { Fixture } from '../lib/fixtures';
 import type { EntryState } from '../lib/chain/ChainClient';
+import type { PoolPick } from '../lib/api';
 import { describeCommitError } from '../lib/commitError';
+import { scorePick } from '../lib/scoring';
 import { teamName, teamFlag } from '../lib/teams';
 
 export type FixtureStatus = 'open' | 'committed' | 'locked' | 'revealed';
@@ -47,16 +49,82 @@ function TeamRow({
   );
 }
 
+function shortPk(pk: string): string {
+  return pk.length > 12 ? `${pk.slice(0, 4)}…${pk.slice(-4)}` : pk;
+}
+
+/** Collapsible list of everyone's revealed picks for a fixture (post-kickoff). */
+function PoolPicksList({ picks, selfWallet }: { picks: PoolPick[]; selfWallet?: string }) {
+  const [open, setOpen] = useState(false);
+  if (picks.length === 0) return null;
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          width: '100%',
+          background: 'none',
+          border: 'none',
+          padding: '4px 0',
+          fontSize: 13,
+          fontWeight: 700,
+          color: 'var(--muted)',
+          textAlign: 'left',
+          cursor: 'pointer',
+        }}
+      >
+        {open ? '▾' : '▸'} Palpites do bolão ({picks.length})
+      </button>
+      {open && (
+        <div style={{ borderTop: '1px solid var(--line)', marginTop: 4 }}>
+          {picks.map((p) => (
+            <div
+              key={p.wallet}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid var(--line)' }}
+            >
+              <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>
+                {p.email ?? shortPk(p.wallet)}
+                {p.wallet === selfWallet && ' (você)'}
+              </span>
+              <span className="ac-condensed" style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>
+                {p.home} – {p.away}
+              </span>
+              {p.points !== null && (
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    minWidth: 38,
+                    textAlign: 'right',
+                    color: p.points > 0 ? '#1B8A3E' : 'var(--faint)',
+                  }}
+                >
+                  {p.points > 0 ? `+${p.points}` : '0'} pts
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function FixtureRow({
   fixture,
   entry,
   nowTs,
   onCommit,
+  poolPicks,
+  selfWallet,
 }: {
   fixture: Fixture;
   entry: EntryState | null;
   nowTs: number;
   onCommit: (fixtureId: number, homeGoals: number, awayGoals: number) => Promise<void>;
+  /** Everyone's revealed picks for this fixture (shown once the match has started). */
+  poolPicks?: PoolPick[];
+  selfWallet?: string;
 }) {
   const [home, setHome] = useState(0);
   const [away, setAway] = useState(0);
@@ -84,6 +152,7 @@ export function FixtureRow({
   };
 
   if (status === 'locked') {
+    const result = fixture.result ?? null;
     return (
       <div
         aria-label={label}
@@ -96,23 +165,34 @@ export function FixtureRow({
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
           <span className="ac-fx-time" style={{ color: '#A99C7E' }}>⏱ {time}</span>
-          <span className="ac-badge-late">Prazo encerrado</span>
+          <span className="ac-badge-late">{entry ? 'Aguardando revelação' : 'Prazo encerrado'}</span>
         </div>
         <TeamRow flag={homeFlag} name={homeName} dim>
-          <span className="ac-step-val" style={{ minWidth: 36, fontSize: 22, color: '#C3B893' }}>—</span>
+          <span className="ac-step-val" style={{ minWidth: 36, fontSize: 22, color: result ? '#7A7460' : '#C3B893' }}>
+            {result ? result.home : '—'}
+          </span>
         </TeamRow>
         <div className="ac-fx-divider" style={{ background: '#EFE6D0' }} />
         <TeamRow flag={awayFlag} name={awayName} dim>
-          <span className="ac-step-val" style={{ minWidth: 36, fontSize: 22, color: '#C3B893' }}>—</span>
+          <span className="ac-step-val" style={{ minWidth: 36, fontSize: 22, color: result ? '#7A7460' : '#C3B893' }}>
+            {result ? result.away : '—'}
+          </span>
         </TeamRow>
         <div className="ac-fx-footnote" style={{ color: '#A9925A', fontWeight: 600, fontSize: 12 }}>
-          Você não palpitou a tempo
+          {entry
+            ? 'Palpite travado · será revelado e pontuado em instantes'
+            : 'Você não palpitou a tempo'}
         </div>
+        {poolPicks && <PoolPicksList picks={poolPicks} selfWallet={selfWallet} />}
       </div>
     );
   }
 
   if (status === 'revealed' && entry) {
+    const result = fixture.result ?? null;
+    const points = result
+      ? scorePick({ home: entry.homeGoals, away: entry.awayGoals }, result)
+      : null;
     return (
       <div aria-label={label} className="ac-card" style={{ padding: '13px 15px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
@@ -120,17 +200,31 @@ export function FixtureRow({
             className="ac-condensed"
             style={{ fontWeight: 700, fontSize: 11, letterSpacing: '.8px', color: 'var(--faint)', textTransform: 'uppercase' }}
           >
-            Encerrado
+            {result ? (result.final ? 'Encerrado' : 'Em andamento') : 'Aguardando resultado'}
           </span>
           <span className="ac-badge-saved">Seu palpite: {entry.homeGoals} – {entry.awayGoals}</span>
         </div>
         <TeamRow flag={homeFlag} name={homeName}>
-          <span className="ac-score-box">{entry.homeGoals}</span>
+          <span className="ac-score-box">{result ? result.home : '–'}</span>
         </TeamRow>
         <div className="ac-fx-divider" />
         <TeamRow flag={awayFlag} name={awayName}>
-          <span className="ac-score-box">{entry.awayGoals}</span>
+          <span className="ac-score-box">{result ? result.away : '–'}</span>
         </TeamRow>
+        {points !== null && (
+          <div
+            className="ac-fx-footnote"
+            style={{ fontWeight: 700, color: points > 0 ? '#1B8A3E' : 'var(--faint)' }}
+          >
+            {points > 0
+              ? `✓ Você ganhou ${points} ${points === 1 ? 'ponto' : 'pontos'}${result && !result.final ? ' (parcial)' : ''}`
+              : `✗ Palpite errado · 0 pontos${result && !result.final ? ' (parcial)' : ''}`}
+          </div>
+        )}
+        {points === null && (
+          <div className="ac-fx-footnote">Resultado sai assim que o jogo começar a pontuar</div>
+        )}
+        {poolPicks && <PoolPicksList picks={poolPicks} selfWallet={selfWallet} />}
       </div>
     );
   }

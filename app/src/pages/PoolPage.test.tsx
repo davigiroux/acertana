@@ -39,6 +39,7 @@ vi.mock('../lib/api', () => ({
   postFaucet: vi.fn(async () => undefined),
   getLeaderboard: vi.fn(async () => ({ standings: [], updatedAt: 0, provisional: false })),
   getPoolInfo: vi.fn(async () => ({ poolPubkey: 'POOLPUBKEY11', name: 'P', organizer: 'SomeoneElse' })),
+  getPoolPicks: vi.fn(async () => []),
   getJoinRequests: vi.fn(async () => []),
   postRequestAction: vi.fn(async () => undefined),
 }));
@@ -49,6 +50,7 @@ import {
   postFaucet,
   getLeaderboard,
   getPoolInfo,
+  getPoolPicks,
   getJoinRequests,
   postRequestAction,
 } from '../lib/api';
@@ -147,6 +149,75 @@ describe('PoolPage', () => {
     expect(await screen.findByText(/Seu palpite: 3 – 2/)).toBeTruthy();
     expect(chain.getEntry).toHaveBeenCalledWith(POOL, 'PARTICIPANT1', 1001n);
     expect(screen.queryByRole('button', { name: /salvar palpite/i })).toBeNull();
+  });
+
+  it('revealed entry with a result: shows real score and points won', async () => {
+    const chain = mockChain({ revealed: true, homeGoals: 3, awayGoals: 2 });
+    render(
+      <PoolPage
+        poolPubkey={POOL}
+        chainClient={chain}
+        fixtures={[
+          fixture({ kickoffTs: NOW - 7200, result: { home: 3, away: 2, final: true } }),
+        ]}
+        nowTs={NOW}
+      />,
+    );
+    expect(await screen.findByText(/Seu palpite: 3 – 2/)).toBeTruthy();
+    expect(await screen.findByText(/Você ganhou 5 pontos/)).toBeTruthy();
+    expect(screen.getByText('Encerrado')).toBeTruthy();
+  });
+
+  it('locked fixture with a committed entry: awaiting reveal, not "missed deadline"', async () => {
+    const chain = mockChain({ revealed: false, homeGoals: 0, awayGoals: 0 });
+    render(
+      <PoolPage
+        poolPubkey={POOL}
+        chainClient={chain}
+        fixtures={[fixture({ kickoffTs: NOW - 60 })]}
+        nowTs={NOW}
+      />,
+    );
+    expect(await screen.findByText('Aguardando revelação')).toBeTruthy();
+    expect(screen.queryByText(/não palpitou a tempo/)).toBeNull();
+  });
+
+  it('post-kickoff fixture: fetches pool picks and lists them expanded', async () => {
+    vi.mocked(getPoolPicks).mockResolvedValueOnce([
+      {
+        fixtureId: 1001,
+        result: { home: 2, away: 1, final: true },
+        picks: [
+          { wallet: 'PARTICIPANT1', email: 'me@ex.com', home: 2, away: 1, points: 5 },
+          { wallet: 'OtherWallet1', email: null, home: 0, away: 0, points: 0 },
+        ],
+      },
+    ]);
+    render(
+      <PoolPage
+        poolPubkey={POOL}
+        chainClient={mockChain()}
+        fixtures={[fixture({ kickoffTs: NOW - 7200, result: { home: 2, away: 1, final: true } })]}
+        nowTs={NOW}
+      />,
+    );
+    await waitFor(() =>
+      expect(getPoolPicks).toHaveBeenCalledWith(POOL, 'PARTICIPANT1', 'test-token'),
+    );
+    const toggle = await screen.findByRole('button', { name: /Palpites do bolão \(2\)/ });
+    fireEvent.click(toggle);
+    expect(await screen.findByText(/me@ex\.com/)).toBeTruthy();
+    expect(screen.getByText('OtherWallet1')).toBeTruthy();
+    expect(screen.getByText('+5 pts')).toBeTruthy();
+    expect(screen.getByText('0 pts')).toBeTruthy();
+  });
+
+  it('pre-kickoff fixtures only: pool picks are not fetched', async () => {
+    render(
+      <PoolPage poolPubkey={POOL} chainClient={mockChain()} fixtures={[fixture()]} nowTs={NOW} />,
+    );
+    await waitFor(() => expect(getPoolInfo).toHaveBeenCalled());
+    expect(getPoolPicks).not.toHaveBeenCalled();
   });
 
   it('committed entry: marker only, no re-commit affordance (Entry is init-only)', async () => {
