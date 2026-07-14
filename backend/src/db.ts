@@ -36,6 +36,13 @@ export function openDb(path = process.env.DB_PATH ?? "acertana.db"): Db {
       registered  INTEGER NOT NULL DEFAULT 0,
       updated_at  INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS results (
+      fixture_id  INTEGER PRIMARY KEY,
+      home        INTEGER NOT NULL,
+      away        INTEGER NOT NULL,
+      final       INTEGER NOT NULL DEFAULT 0,
+      updated_at  INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS picks (
       pool_pubkey TEXT NOT NULL,
       wallet      TEXT NOT NULL,

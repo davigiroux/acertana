@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { openDb } from "../src/db.js";
 import { ResultsStore } from "../src/results.js";
 import { loadFixtures, scoreEvents, type ScoreEvent } from "../src/txline/stub.js";
 
@@ -50,5 +51,26 @@ describe("ResultsStore", () => {
     store.apply({ fixtureId: 1, homeGoals: 2, awayGoals: 1, final: true });
     store.apply({ fixtureId: 1, homeGoals: 1, awayGoals: 0, final: false });
     expect(store.get(1)).toMatchObject({ home: 2, away: 1, final: true });
+  });
+
+  it("db-backed: results survive a restart (new store over the same db)", () => {
+    const db = openDb(":memory:");
+    const store = new ResultsStore(() => 42, db);
+    store.apply({ fixtureId: 1, homeGoals: 2, awayGoals: 1, final: true });
+    store.apply({ fixtureId: 2, homeGoals: 1, awayGoals: 1, final: false });
+
+    const reloaded = new ResultsStore(() => 99, db);
+    expect(reloaded.get(1)).toEqual({ fixtureId: 1, home: 2, away: 1, final: true, updatedAt: 42 });
+    expect(reloaded.get(2)).toMatchObject({ home: 1, away: 1, final: false });
+    expect(reloaded.hasProvisional()).toBe(true);
+    expect(reloaded.updatedAt()).toBe(42);
+
+    // final-wins still holds across the reload, and updates write through.
+    reloaded.apply({ fixtureId: 1, homeGoals: 0, awayGoals: 0, final: false });
+    expect(reloaded.get(1)).toMatchObject({ home: 2, away: 1 });
+    reloaded.apply({ fixtureId: 2, homeGoals: 2, awayGoals: 1, final: true });
+    const again = new ResultsStore(undefined, db);
+    expect(again.get(2)).toMatchObject({ home: 2, away: 1, final: true });
+    expect(again.hasProvisional()).toBe(false);
   });
 });
