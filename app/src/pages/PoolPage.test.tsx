@@ -36,10 +36,11 @@ vi.mock('../lib/commitment', () => ({
 
 vi.mock('../lib/api', () => ({
   postPick: vi.fn(async () => undefined),
+  postFaucet: vi.fn(async () => undefined),
 }));
 
 import { deriveSalt, computeCommitment } from '../lib/commitment';
-import { postPick } from '../lib/api';
+import { postPick, postFaucet } from '../lib/api';
 
 const NOW = 1_781_000_000;
 const POOL = 'POOLPUBKEY11';
@@ -85,7 +86,11 @@ describe('PoolPage', () => {
 
     expect(computeCommitment).toHaveBeenCalledWith(2, 1, SALT);
 
+    expect(postFaucet).toHaveBeenCalledWith('PARTICIPANT1', 'test-token');
     expect(chain.commitPick).toHaveBeenCalledOnce();
+    const faucetOrder = vi.mocked(postFaucet).mock.invocationCallOrder[0];
+    const commitOrder = vi.mocked(chain.commitPick).mock.invocationCallOrder[0];
+    expect(faucetOrder).toBeLessThan(commitOrder);
     const args = vi.mocked(chain.commitPick).mock.calls[0][0];
     expect(args.pool).toBe(POOL);
     expect(args.participant).toBe('PARTICIPANT1');
