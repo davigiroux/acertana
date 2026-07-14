@@ -194,8 +194,8 @@ describe('PoolPage', () => {
   it('ranking tab: fetches and lists standings, marks own row, shows provisional badge', async () => {
     vi.mocked(getLeaderboard).mockResolvedValueOnce({
       standings: [
-        { rank: 1, wallet: 'PARTICIPANT1', points: 8, exact: 1, diff: 1, result: 0, scored: 2 },
-        { rank: 2, wallet: 'OtherWallet1', points: 1, exact: 0, diff: 0, result: 1, scored: 2 },
+        { rank: 1, wallet: 'PARTICIPANT1', points: 8, exact: 1, diff: 1, result: 0, scored: 2, email: 'me@ex.com' },
+        { rank: 2, wallet: 'OtherWallet1', points: 1, exact: 0, diff: 0, result: 1, scored: 2, email: null },
       ],
       updatedAt: 42,
       provisional: true,
@@ -205,9 +205,13 @@ describe('PoolPage', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Ranking' }));
 
-    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledWith(POOL));
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledWith(POOL, 'PARTICIPANT1', 'test-token'));
     expect(await screen.findByText(/você/)).toBeTruthy();
     expect(screen.getByText(/provisório/)).toBeTruthy();
+    // Row with an email shows it instead of the shortened wallet.
+    expect(screen.getByText(/me@ex\.com/)).toBeTruthy();
+    // Row without an email falls back to the wallet address.
+    expect(screen.getByText('OtherWallet1')).toBeTruthy();
     expect(screen.getByText('8 pts')).toBeTruthy();
     expect(screen.getByText('1 pts')).toBeTruthy();
   });
@@ -271,7 +275,7 @@ describe('PoolPage', () => {
       organizer: 'PARTICIPANT1',
     });
     vi.mocked(getJoinRequests).mockResolvedValue([
-      { wallet: 'Requester1', emailHint: null, joinedAt: 1 },
+      { wallet: 'Requester1', email: null, joinedAt: 1 },
     ]);
 
     render(
@@ -294,6 +298,23 @@ describe('PoolPage', () => {
         'test-token',
       ),
     );
+  });
+
+  it('organizer: Gerenciar tab shows requester email when present', async () => {
+    vi.mocked(getPoolInfo).mockResolvedValue({
+      poolPubkey: POOL,
+      name: 'P',
+      organizer: 'PARTICIPANT1',
+    });
+    vi.mocked(getJoinRequests).mockResolvedValue([
+      { wallet: 'Requester1', email: 'requester@ex.com', joinedAt: 1 },
+    ]);
+
+    render(
+      <PoolPage poolPubkey={POOL} chainClient={mockChain()} fixtures={[fixture()]} nowTs={NOW} />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Gerenciar' }));
+    expect(await screen.findByText('requester@ex.com')).toBeTruthy();
   });
 
   it('organizer: Gerenciar tab shows empty state when no pending requests', async () => {

@@ -166,7 +166,8 @@ export function PoolPage({
   useEffect(() => {
     if (tab !== 'ranking') return;
     let cancelled = false;
-    getLeaderboard(poolPubkey)
+    (async () =>
+      getLeaderboard(poolPubkey, address ?? undefined, (await getAccessToken()) ?? undefined))()
       .then((lb) => {
         if (cancelled) return;
         setStandings(lb.standings);
@@ -177,7 +178,7 @@ export function PoolPage({
     return () => {
       cancelled = true;
     };
-  }, [tab, poolPubkey]);
+  }, [tab, poolPubkey, address, getAccessToken]);
 
   useEffect(() => {
     if (!address) return;
@@ -384,7 +385,7 @@ export function PoolPage({
                     {s.rank}
                   </span>
                   <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
-                    {shortPubkey(s.wallet)}
+                    {s.email ?? shortPubkey(s.wallet)}
                     {s.wallet === address && ' (você)'}
                   </span>
                   <span className="ac-condensed" style={{ fontWeight: 800, fontSize: 16, color: 'var(--ink)' }}>
@@ -432,7 +433,7 @@ export function PoolPage({
                   }}
                 >
                   <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
-                    {shortPubkey(r.wallet)}
+                    {r.email ?? shortPubkey(r.wallet)}
                   </span>
                   <button
                     style={{

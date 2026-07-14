@@ -37,7 +37,11 @@ describe("GET /pools/:pubkey/leaderboard", () => {
       payload: { name: "P", organizer: "O", poolPubkey: POOL },
     });
     for (const wallet of ["Alice", "Bob", "Carol"]) {
-      await app.inject({ method: "POST", url: `/pools/${POOL}/join`, payload: { wallet } });
+      await app.inject({
+        method: "POST",
+        url: `/pools/${POOL}/join`,
+        payload: { wallet, emailHint: `${wallet.toLowerCase()}@ex.com` },
+      });
     }
   });
 
@@ -45,18 +49,27 @@ describe("GET /pools/:pubkey/leaderboard", () => {
     store.apply({ fixtureId: 1, homeGoals: 2, awayGoals: 1, final: true });
     store.apply({ fixtureId: 2, homeGoals: 1, awayGoals: 1, final: false });
 
-    const res = await app.inject({ method: "GET", url: `/pools/${POOL}/leaderboard` });
+    // Member caller (dev mode, no verifier) sees emails.
+    const res = await app.inject({ method: "GET", url: `/pools/${POOL}/leaderboard?wallet=Alice` });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
       updatedAt: 42,
       provisional: true,
       standings: [
-        { rank: 1, wallet: "Alice", points: 8, exact: 1, diff: 1, result: 0, scored: 2 },
-        { rank: 2, wallet: "Bob", points: 1, exact: 0, diff: 0, result: 1, scored: 2 },
-        { rank: 3, wallet: "Carol", points: 0, exact: 0, diff: 0, result: 0, scored: 0 },
+        { rank: 1, wallet: "Alice", points: 8, exact: 1, diff: 1, result: 0, scored: 2, email: "alice@ex.com" },
+        { rank: 2, wallet: "Bob", points: 1, exact: 0, diff: 0, result: 1, scored: 2, email: "bob@ex.com" },
+        { rank: 3, wallet: "Carol", points: 0, exact: 0, diff: 0, result: 0, scored: 0, email: "carol@ex.com" },
       ],
     });
     expect(requestedPools).toEqual([POOL]);
+
+    // Anonymous callers get standings but NO emails (PII gate).
+    const anon = await app.inject({ method: "GET", url: `/pools/${POOL}/leaderboard` });
+    expect(anon.json().standings.map((s: { email: string | null }) => s.email)).toEqual([
+      null,
+      null,
+      null,
+    ]);
   });
 
   it("provisional flips false once every result is final", async () => {

@@ -10,8 +10,10 @@ const POOL = "F1xTuReP0oLPubkeyXXXXXXXXXXXXXXXXXXXXXXXXXX";
 const SALT = "ab".repeat(32);
 
 /** Fake verifier: accepts only "Bearer good" for wallet "OwnedWallet". */
-const verifyWallet = async (header: string | undefined, wallet: string) =>
-  header === "Bearer good" && wallet === "OwnedWallet";
+const verifyWallet = async (header: string | undefined, wallet: string) => ({
+  ok: header === "Bearer good" && wallet === "OwnedWallet",
+  email: header === "Bearer good" && wallet === "OwnedWallet" ? "owned@ex.com" : undefined,
+});
 
 function createPool(app: FastifyInstance) {
   // OwnedWallet + good token so the helper works when a verifier is configured.
@@ -79,6 +81,20 @@ describe("wallet auth", () => {
     expect((await pick("OwnedWallet")).statusCode).toBe(401);
     expect((await pick("SomeoneElse", "Bearer good")).statusCode).toBe(401);
     expect((await pick("OwnedWallet", "Bearer good")).statusCode).toBe(201);
+  });
+
+  it("stores the verified email on join, ignoring a spoofed emailHint in the body", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: `/pools/${POOL}/join`,
+      headers: { authorization: "Bearer good" },
+      payload: { wallet: "OwnedWallet", emailHint: "attacker@evil.com" },
+    });
+    expect(res.statusCode).toBe(200);
+    const members = await app.inject({ method: "GET", url: `/pools/${POOL}/members` });
+    expect(members.json().members).toEqual([
+      expect.objectContaining({ wallet: "OwnedWallet", emailHint: "owned@ex.com" }),
+    ]);
   });
 
   it("stays open when no verifier is configured", async () => {
