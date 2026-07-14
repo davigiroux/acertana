@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { Fixture } from '../lib/fixtures';
 import type { EntryState } from '../lib/chain/ChainClient';
+import { describeCommitError } from '../lib/commitError';
 
 export type FixtureStatus = 'open' | 'committed' | 'locked' | 'revealed';
 
@@ -71,7 +72,7 @@ export function FixtureRow({
     try {
       await onCommit(fixture.fixtureId, home, away);
     } catch (e) {
-      setError(String((e as Error).message ?? e));
+      setError(describeCommitError(e));
     } finally {
       setBusy(false);
     }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { postPick } from '../lib/api';
+import { postFaucet, postPick } from '../lib/api';
 import { enqueuePendingPick, retryPendingPicks } from '../lib/pendingPicks';
 import { getFixtures, type Fixture } from '../lib/fixtures';
 import { computeCommitment, deriveSalt } from '../lib/commitment';
@@ -110,6 +110,9 @@ export function PoolPage({
         BigInt(fixtureId),
       );
       const commitment = computeCommitment(homeGoals, awayGoals, salt);
+      // Fresh (link-joined) wallets start empty; ensure fee dust before the tx.
+      const token = (await getAccessToken()) ?? undefined;
+      await postFaucet(address, token).catch(() => undefined);
       await chain.commitPick({
         pool: poolPubkey,
         participant: address,
@@ -126,7 +129,7 @@ export function PoolPage({
         saltHex: bytesToHex(salt),
       };
       try {
-        await postPick(payload, (await getAccessToken()) ?? undefined);
+        await postPick(payload, token);
       } catch {
         // On-chain commit landed; keep the payload locally and retry later
         // (backend needs it for auto-reveal).
