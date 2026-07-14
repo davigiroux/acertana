@@ -27,11 +27,14 @@ export async function postJoin(
   poolPubkey: string,
   wallet: string,
   accessToken?: string,
+  emailHint?: string,
 ): Promise<JoinStatus> {
   const res = await fetch(`${backendUrl()}/pools/${encodeURIComponent(poolPubkey)}/join`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...authHeaders(accessToken) },
-    body: JSON.stringify({ wallet }),
+    // emailHint is a dev-mode fallback only — when auth is on, the backend
+    // sources the email from the VERIFIED Privy identity and ignores this.
+    body: JSON.stringify({ wallet, emailHint }),
   });
   if (!res.ok) throw new Error(`join failed (${res.status})`);
   const body = (await res.json()) as { status?: JoinStatus };
@@ -97,6 +100,7 @@ export interface Standing {
   diff: number;
   result: number;
   scored: number;
+  email?: string | null;
 }
 
 export interface Leaderboard {
@@ -150,7 +154,7 @@ export async function getPoolInfo(
 
 export interface JoinRequest {
   wallet: string;
-  emailHint: string | null;
+  email: string | null;
   joinedAt: number;
 }
 

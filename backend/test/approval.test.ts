@@ -7,8 +7,9 @@ import { buildServer } from "../src/server.js";
 const KEY = Buffer.alloc(32, 7);
 const POOL = "ApPr0va1P0oLPubkeyXXXXXXXXXXXXXXXXXXXXXXXXX";
 
-const verifyWallet = async (header: string | undefined, wallet: string) =>
-  header === "Bearer good" && wallet === "OwnedWallet";
+const verifyWallet = async (header: string | undefined, wallet: string) => ({
+  ok: header === "Bearer good" && wallet === "OwnedWallet",
+});
 
 describe("pool approval", () => {
   let db: Db;
@@ -69,7 +70,11 @@ describe("pool approval", () => {
       url: "/pools",
       payload: { name: "Gated", organizer: "Org", poolPubkey: POOL, requiresApproval: true },
     });
-    await app.inject({ method: "POST", url: `/pools/${POOL}/join`, payload: { wallet: "Alice" } });
+    await app.inject({
+      method: "POST",
+      url: `/pools/${POOL}/join`,
+      payload: { wallet: "Alice", emailHint: "alice@ex.com" },
+    });
     await app.inject({ method: "POST", url: `/pools/${POOL}/join`, payload: { wallet: "Bob" } });
 
     const stranger = await app.inject({
@@ -86,6 +91,10 @@ describe("pool approval", () => {
     expect(organizer.json().requests.map((r: { wallet: string }) => r.wallet)).toEqual([
       "Alice",
       "Bob",
+    ]);
+    expect(organizer.json().requests.map((r: { email: string | null }) => r.email)).toEqual([
+      "alice@ex.com",
+      null,
     ]);
   });
 
@@ -144,7 +153,7 @@ describe("pool approval", () => {
 
   it("approve/reject requires organizer auth token when verifier configured", async () => {
     // Accept "Bearer good" for any wallet so both the organizer and Alice can act.
-    const anyWalletVerifier = async (header: string | undefined) => header === "Bearer good";
+    const anyWalletVerifier = async (header: string | undefined) => ({ ok: header === "Bearer good" });
     const authedApp = buildServer({ db, pickKey: KEY, verifyWallet: anyWalletVerifier });
     await authedApp.inject({
       method: "POST",

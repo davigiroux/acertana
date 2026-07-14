@@ -6,8 +6,9 @@ import { buildServer } from "../src/server.js";
 const KEY = Buffer.alloc(32, 7);
 const POOL = "F1xTuReP0oLPubkeyXXXXXXXXXXXXXXXXXXXXXXXXXX";
 
-const verifyWallet = async (header: string | undefined, wallet: string) =>
-  header === "Bearer good" && wallet === "OwnedWallet";
+const verifyWallet = async (header: string | undefined, wallet: string) => ({
+  ok: header === "Bearer good" && wallet === "OwnedWallet",
+});
 
 describe("GET /pools/:pubkey", () => {
   let db: Db;

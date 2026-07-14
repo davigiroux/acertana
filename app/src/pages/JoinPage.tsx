@@ -8,7 +8,7 @@ import { useInvisibleWallet } from '../lib/wallet/useInvisibleWallet';
  * with the invisible wallet, then land on the pool page.
  */
 export function JoinPage({ code }: { code: string }) {
-  const { authenticated, ready, address, login, getAccessToken } = useInvisibleWallet();
+  const { authenticated, ready, address, user, login, getAccessToken } = useInvisibleWallet();
   const [info, setInfo] = useState<JoinInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -29,7 +29,9 @@ export function JoinPage({ code }: { code: string }) {
     if (!info || !authenticated || !ready || !address || joining.current) return;
     joining.current = true;
     getAccessToken()
-      .then((token) => postJoin(info.poolPubkey, address, token ?? undefined))
+      // emailHint is only a dev-mode fallback — with auth on, the backend
+      // sources the email itself from the verified Privy token.
+      .then((token) => postJoin(info.poolPubkey, address, token ?? undefined, user?.email?.address))
       .then((status) => {
         if (status === 'pending') {
           setPending(true);
@@ -41,7 +43,7 @@ export function JoinPage({ code }: { code: string }) {
         joining.current = false;
         setError(String(e.message ?? e));
       });
-  }, [info, authenticated, ready, address, getAccessToken]);
+  }, [info, authenticated, ready, address, user, getAccessToken]);
 
   if (pending) {
     return (

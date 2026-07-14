@@ -49,7 +49,7 @@ export function buildServer({
     if (!name || !organizer || !poolPubkey) {
       return reply.code(400).send({ error: "name, organizer, poolPubkey required" });
     }
-    if (verifyWallet && !(await verifyWallet(req.headers.authorization, organizer))) {
+    if (verifyWallet && !(await verifyWallet(req.headers.authorization, organizer)).ok) {
       return reply.code(401).send({ error: "invalid auth token for organizer" });
     }
     const joinCode = insertPoolWithJoinCode(db, {
@@ -91,7 +91,7 @@ export function buildServer({
       if (wallet) {
         if (verifyWallet) {
           isMember =
-            (await verifyWallet(req.headers.authorization, wallet)) &&
+            (await verifyWallet(req.headers.authorization, wallet)).ok &&
             (wallet === row.organizer || isActiveMember(wallet));
         } else {
           isMember = wallet === row.organizer || isActiveMember(wallet);
@@ -109,7 +109,7 @@ export function buildServer({
   // Pools a wallet belongs to (for the "Meus bolões" home list).
   app.get<{ Params: { wallet: string } }>("/wallets/:wallet/pools", async (req, reply) => {
     const { wallet } = req.params;
-    if (verifyWallet && !(await verifyWallet(req.headers.authorization, wallet))) {
+    if (verifyWallet && !(await verifyWallet(req.headers.authorization, wallet)).ok) {
       return reply.code(401).send({ error: "invalid auth token for wallet" });
     }
     const rows = db
@@ -131,8 +131,13 @@ export function buildServer({
     async (req, reply) => {
       const { wallet, emailHint } = req.body ?? {};
       if (!wallet) return reply.code(400).send({ error: "wallet required" });
-      if (verifyWallet && !(await verifyWallet(req.headers.authorization, wallet))) {
-        return reply.code(401).send({ error: "invalid auth token for wallet" });
+      // Verified email (when auth is on) always wins over anything the client
+      // claims in the body — emailHint is only a dev-mode fallback.
+      let email: string | undefined = emailHint;
+      if (verifyWallet) {
+        const result = await verifyWallet(req.headers.authorization, wallet);
+        if (!result.ok) return reply.code(401).send({ error: "invalid auth token for wallet" });
+        email = result.email;
       }
       const pool = db
         .prepare("SELECT pool_pubkey, requires_approval FROM pools WHERE pool_pubkey = ?")
@@ -142,8 +147,9 @@ export function buildServer({
       db.prepare(
         `INSERT INTO members (pool_pubkey, wallet, email_hint, joined_at, status)
          VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (pool_pubkey, wallet) DO NOTHING`,
-      ).run(req.params.pubkey, wallet, emailHint ?? null, Math.floor(Date.now() / 1000), status);
+         ON CONFLICT (pool_pubkey, wallet)
+         DO UPDATE SET email_hint = COALESCE(members.email_hint, excluded.email_hint)`,
+      ).run(req.params.pubkey, wallet, email ?? null, Math.floor(Date.now() / 1000), status);
       const existing = db
         .prepare("SELECT status FROM members WHERE pool_pubkey = ? AND wallet = ?")
         .get(req.params.pubkey, wallet) as { status: string } | undefined;
@@ -182,7 +188,7 @@ export function buildServer({
       if (!wallet || wallet !== row.organizer) {
         return reply.code(401).send({ error: "organizer only" });
       }
-      if (verifyWallet && !(await verifyWallet(req.headers.authorization, wallet))) {
+      if (verifyWallet && !(await verifyWallet(req.headers.authorization, wallet)).ok) {
         return reply.code(401).send({ error: "invalid auth token for organizer" });
       }
       const requests = db
@@ -193,7 +199,7 @@ export function buildServer({
       return {
         requests: requests.map((m) => ({
           wallet: m.wallet,
-          emailHint: m.email_hint,
+          email: m.email_hint,
           joinedAt: m.joined_at,
         })),
       };
@@ -213,7 +219,7 @@ export function buildServer({
     if (!organizerWallet || organizerWallet !== row.organizer) {
       return reply.code(401).send({ error: "organizer only" });
     }
-    if (verifyWallet && !(await verifyWallet(req.headers.authorization, organizerWallet))) {
+    if (verifyWallet && !(await verifyWallet(req.headers.authorization, organizerWallet)).ok) {
       return reply.code(401).send({ error: "invalid auth token for organizer" });
     }
     if (action !== "approve" && action !== "reject") {
@@ -248,14 +254,20 @@ export function buildServer({
       .prepare("SELECT pool_pubkey FROM pools WHERE pool_pubkey = ?")
       .get(req.params.pubkey);
     if (!pool) return reply.code(404).send({ error: "unknown pool" });
-    const members = (
-      db.prepare(
-        "SELECT wallet FROM members WHERE pool_pubkey = ? AND status = 'member' ORDER BY joined_at",
-      ).all(req.params.pubkey) as { wallet: string }[]
-    ).map((m) => m.wallet);
+    const memberRows = db
+      .prepare(
+        "SELECT wallet, email_hint FROM members WHERE pool_pubkey = ? AND status = 'member' ORDER BY joined_at",
+      )
+      .all(req.params.pubkey) as { wallet: string; email_hint: string | null }[];
+    const members = memberRows.map((m) => m.wallet);
+    const emailByWallet = new Map(memberRows.map((m) => [m.wallet, m.email_hint]));
     const entries = await entryProvider.getRevealedEntries(req.params.pubkey);
+    const standings = computeStandings(members, entries, resultsStore.scorelines()).map((s) => ({
+      ...s,
+      email: emailByWallet.get(s.wallet) ?? null,
+    }));
     return {
-      standings: computeStandings(members, entries, resultsStore.scorelines()),
+      standings,
       updatedAt: resultsStore.updatedAt(),
       provisional: resultsStore.hasProvisional(),
     };
@@ -273,7 +285,7 @@ export function buildServer({
     };
   }>("/picks", async (req, reply) => {
     const { poolPubkey, wallet, fixtureId, homeGoals, awayGoals, saltHex } = req.body ?? {};
-    if (wallet && verifyWallet && !(await verifyWallet(req.headers.authorization, wallet))) {
+    if (wallet && verifyWallet && !(await verifyWallet(req.headers.authorization, wallet)).ok) {
       return reply.code(401).send({ error: "invalid auth token for wallet" });
     }
     const isGoals = (n: unknown): n is number =>
@@ -313,7 +325,7 @@ export function buildServer({
     if (!faucet) return reply.code(404).send({ error: "not enabled" });
     const { wallet } = req.body ?? {};
     if (!wallet) return reply.code(400).send({ error: "wallet required" });
-    if (verifyWallet && !(await verifyWallet(req.headers.authorization, wallet))) {
+    if (verifyWallet && !(await verifyWallet(req.headers.authorization, wallet)).ok) {
       return reply.code(401).send({ error: "invalid auth token for wallet" });
     }
     await faucet(wallet);

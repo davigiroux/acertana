@@ -37,7 +37,11 @@ describe("GET /pools/:pubkey/leaderboard", () => {
       payload: { name: "P", organizer: "O", poolPubkey: POOL },
     });
     for (const wallet of ["Alice", "Bob", "Carol"]) {
-      await app.inject({ method: "POST", url: `/pools/${POOL}/join`, payload: { wallet } });
+      await app.inject({
+        method: "POST",
+        url: `/pools/${POOL}/join`,
+        payload: { wallet, emailHint: `${wallet.toLowerCase()}@ex.com` },
+      });
     }
   });
 
@@ -51,9 +55,9 @@ describe("GET /pools/:pubkey/leaderboard", () => {
       updatedAt: 42,
       provisional: true,
       standings: [
-        { rank: 1, wallet: "Alice", points: 8, exact: 1, diff: 1, result: 0, scored: 2 },
-        { rank: 2, wallet: "Bob", points: 1, exact: 0, diff: 0, result: 1, scored: 2 },
-        { rank: 3, wallet: "Carol", points: 0, exact: 0, diff: 0, result: 0, scored: 0 },
+        { rank: 1, wallet: "Alice", points: 8, exact: 1, diff: 1, result: 0, scored: 2, email: "alice@ex.com" },
+        { rank: 2, wallet: "Bob", points: 1, exact: 0, diff: 0, result: 1, scored: 2, email: "bob@ex.com" },
+        { rank: 3, wallet: "Carol", points: 0, exact: 0, diff: 0, result: 0, scored: 0, email: "carol@ex.com" },
       ],
     });
     expect(requestedPools).toEqual([POOL]);

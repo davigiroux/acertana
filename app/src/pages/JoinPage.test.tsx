@@ -52,8 +52,33 @@ describe('JoinPage', () => {
     Object.assign(walletState, { authenticated: true, ready: true, address: 'WALLET111' });
     rerender(<JoinPage code="ABC123" />);
 
-    await waitFor(() => expect(postJoin).toHaveBeenCalledWith('POOLPUBKEY', 'WALLET111', 'test-token'));
+    await waitFor(() =>
+      expect(postJoin).toHaveBeenCalledWith('POOLPUBKEY', 'WALLET111', 'test-token', undefined),
+    );
     await waitFor(() => expect(window.location.pathname).toBe('/p/POOLPUBKEY'));
+  });
+
+  it('passes the Privy-verified email as the dev-mode emailHint fallback', async () => {
+    const { rerender } = render(<JoinPage code="ABC123" />);
+    expect(await screen.findByText(/Office Pool/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /entrar com e-mail/i }));
+
+    Object.assign(walletState, {
+      authenticated: true,
+      ready: true,
+      address: 'WALLET111',
+      user: { email: { address: 'me@example.com' } },
+    });
+    rerender(<JoinPage code="ABC123" />);
+
+    await waitFor(() =>
+      expect(postJoin).toHaveBeenCalledWith(
+        'POOLPUBKEY',
+        'WALLET111',
+        'test-token',
+        'me@example.com',
+      ),
+    );
   });
 
   it('shows error for unknown code', async () => {
