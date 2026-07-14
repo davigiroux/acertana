@@ -38,11 +38,20 @@ vi.mock('../lib/api', () => ({
   postPick: vi.fn(async () => undefined),
   postFaucet: vi.fn(async () => undefined),
   getLeaderboard: vi.fn(async () => ({ standings: [], updatedAt: 0, provisional: false })),
-  getPoolInfo: vi.fn(async () => ({ poolPubkey: 'POOLPUBKEY11', name: 'P' })),
+  getPoolInfo: vi.fn(async () => ({ poolPubkey: 'POOLPUBKEY11', name: 'P', organizer: 'SomeoneElse' })),
+  getJoinRequests: vi.fn(async () => []),
+  postRequestAction: vi.fn(async () => undefined),
 }));
 
 import { deriveSalt, computeCommitment } from '../lib/commitment';
-import { postPick, postFaucet, getLeaderboard, getPoolInfo } from '../lib/api';
+import {
+  postPick,
+  postFaucet,
+  getLeaderboard,
+  getPoolInfo,
+  getJoinRequests,
+  postRequestAction,
+} from '../lib/api';
 
 const NOW = 1_781_000_000;
 const POOL = 'POOLPUBKEY11';
@@ -220,6 +229,7 @@ describe('PoolPage', () => {
     vi.mocked(getPoolInfo).mockResolvedValueOnce({
       poolPubkey: POOL,
       name: 'P',
+      organizer: 'SomeoneElse',
       joinCode: 'ABC123',
     });
     const writeText = vi.fn(async () => undefined);
@@ -244,5 +254,61 @@ describe('PoolPage', () => {
     );
     await waitFor(() => expect(getPoolInfo).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: 'Convidar' })).toBeNull();
+  });
+
+  it('non-organizer: no Gerenciar tab shown', async () => {
+    render(
+      <PoolPage poolPubkey={POOL} chainClient={mockChain()} fixtures={[fixture()]} nowTs={NOW} />,
+    );
+    await waitFor(() => expect(getPoolInfo).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Gerenciar' })).toBeNull();
+  });
+
+  it('organizer: Gerenciar tab lists pending requests, approve/reject call the api', async () => {
+    vi.mocked(getPoolInfo).mockResolvedValue({
+      poolPubkey: POOL,
+      name: 'P',
+      organizer: 'PARTICIPANT1',
+    });
+    vi.mocked(getJoinRequests).mockResolvedValue([
+      { wallet: 'Requester1', emailHint: null, joinedAt: 1 },
+    ]);
+
+    render(
+      <PoolPage poolPubkey={POOL} chainClient={mockChain()} fixtures={[fixture()]} nowTs={NOW} />,
+    );
+
+    const tab = await screen.findByRole('button', { name: 'Gerenciar' });
+    fireEvent.click(tab);
+
+    await waitFor(() => expect(getJoinRequests).toHaveBeenCalledWith(POOL, 'PARTICIPANT1', 'test-token'));
+    expect(await screen.findByRole('button', { name: 'Aprovar' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Aprovar' }));
+    await waitFor(() =>
+      expect(postRequestAction).toHaveBeenCalledWith(
+        POOL,
+        'PARTICIPANT1',
+        'approve',
+        'Requester1',
+        'test-token',
+      ),
+    );
+  });
+
+  it('organizer: Gerenciar tab shows empty state when no pending requests', async () => {
+    vi.mocked(getPoolInfo).mockResolvedValue({
+      poolPubkey: POOL,
+      name: 'P',
+      organizer: 'PARTICIPANT1',
+    });
+    vi.mocked(getJoinRequests).mockResolvedValue([]);
+
+    render(
+      <PoolPage poolPubkey={POOL} chainClient={mockChain()} fixtures={[fixture()]} nowTs={NOW} />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Gerenciar' }));
+    expect(await screen.findByText('Nenhum pedido pendente')).toBeTruthy();
   });
 });

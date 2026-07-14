@@ -12,6 +12,7 @@ import { useInvisibleWallet } from '../lib/wallet/useInvisibleWallet';
 export function CreatePoolPage({ chainClient }: { chainClient?: ChainClient }) {
   const { authenticated, ready, address, wallet, login, getAccessToken } = useInvisibleWallet();
   const [name, setName] = useState('');
+  const [requiresApproval, setRequiresApproval] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ joinCode: string; poolPubkey: string } | null>(null);
@@ -32,7 +33,7 @@ export function CreatePoolPage({ chainClient }: { chainClient?: ChainClient }) {
         name: name.trim(),
         signTransaction: (tx) => wallet.signTransaction(tx),
       });
-      const res = await postCreatePool(name.trim(), address, poolPubkey, token);
+      const res = await postCreatePool(name.trim(), address, poolPubkey, token, requiresApproval);
       setResult(res);
     } catch (e) {
       setError(String((e as Error).message ?? e));
@@ -104,6 +105,23 @@ export function CreatePoolPage({ chainClient }: { chainClient?: ChainClient }) {
           maxWidth: 320,
         }}
       />
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginTop: 14,
+          fontSize: 14,
+          color: 'var(--ink)',
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={requiresApproval}
+          onChange={(e) => setRequiresApproval(e.target.checked)}
+        />
+        Aprovar entradas manualmente
+      </label>
       {error && (
         <p className="ac-screen-body" role="alert" style={{ color: '#B4232A' }}>
           {error}

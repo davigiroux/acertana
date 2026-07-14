@@ -32,7 +32,7 @@ describe("GET /pools/:pubkey", () => {
     await app.inject({ method: "POST", url: `/pools/${POOL}/join`, payload: { wallet: "Alice" } });
 
     const noWallet = await app.inject({ method: "GET", url: `/pools/${POOL}` });
-    expect(noWallet.json()).toEqual({ poolPubkey: POOL, name: "P" });
+    expect(noWallet.json()).toEqual({ poolPubkey: POOL, name: "P", organizer: "Org" });
 
     const organizer = await app.inject({ method: "GET", url: `/pools/${POOL}?wallet=Org` });
     expect(organizer.json().joinCode).toBeTruthy();

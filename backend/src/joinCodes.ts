@@ -19,15 +19,15 @@ export function generateJoinCode(): string {
  */
 export function insertPoolWithJoinCode(
   db: Db,
-  pool: { poolPubkey: string; name: string; organizer: string },
+  pool: { poolPubkey: string; name: string; organizer: string; requiresApproval?: boolean },
 ): string {
   const stmt = db.prepare(
-    "INSERT INTO pools (pool_pubkey, join_code, name, organizer) VALUES (?, ?, ?, ?)",
+    "INSERT INTO pools (pool_pubkey, join_code, name, organizer, requires_approval) VALUES (?, ?, ?, ?, ?)",
   );
   for (let attempt = 0; attempt < 10; attempt++) {
     const code = generateJoinCode();
     try {
-      stmt.run(pool.poolPubkey, code, pool.name, pool.organizer);
+      stmt.run(pool.poolPubkey, code, pool.name, pool.organizer, pool.requiresApproval ? 1 : 0);
       return code;
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string };

@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { postFaucet, postPick, getLeaderboard, getPoolInfo, type Standing } from '../lib/api';
+import {
+  postFaucet,
+  postPick,
+  getLeaderboard,
+  getPoolInfo,
+  getJoinRequests,
+  postRequestAction,
+  type Standing,
+  type JoinRequest,
+} from '../lib/api';
 import { enqueuePendingPick, retryPendingPicks } from '../lib/pendingPicks';
 import { getFixtures, type Fixture } from '../lib/fixtures';
 import { computeCommitment, deriveSalt } from '../lib/commitment';
@@ -54,13 +63,17 @@ export function PoolPage({
   const [fixturesError, setFixturesError] = useState<string | null>(null);
   const [entries, setEntries] = useState<Record<number, EntryState | null>>({});
   const [notice, setNotice] = useState<string | null>(null);
-  const [tab, setTab] = useState<'jogos' | 'ranking'>('jogos');
+  const [tab, setTab] = useState<'jogos' | 'ranking' | 'gerenciar'>('jogos');
   const [standings, setStandings] = useState<Standing[] | null>(null);
   const [provisional, setProvisional] = useState(false);
   const [rankingError, setRankingError] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [isOrganizer, setIsOrganizer] = useState(false);
+  const [requests, setRequests] = useState<JoinRequest[] | null>(null);
+  const [requestsError, setRequestsError] = useState<string | null>(null);
+  const [requestBusy, setRequestBusy] = useState<string | null>(null);
 
   // Retry payload uploads that failed after their on-chain commit landed.
   useEffect(() => {
@@ -171,12 +184,54 @@ export function PoolPage({
     let cancelled = false;
     getAccessToken()
       .then((token) => getPoolInfo(poolPubkey, address, token ?? undefined))
-      .then((info) => !cancelled && setJoinCode(info.joinCode ?? null))
-      .catch(() => !cancelled && setJoinCode(null));
+      .then((info) => {
+        if (cancelled) return;
+        setJoinCode(info.joinCode ?? null);
+        setIsOrganizer(info.organizer === address);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setJoinCode(null);
+        setIsOrganizer(false);
+      });
     return () => {
       cancelled = true;
     };
   }, [address, poolPubkey, getAccessToken]);
+
+  const loadRequests = useCallback(async () => {
+    if (!address) return;
+    try {
+      const token = (await getAccessToken()) ?? undefined;
+      const reqs = await getJoinRequests(poolPubkey, address, token);
+      setRequests(reqs);
+      setRequestsError(null);
+    } catch (e) {
+      setRequestsError(String((e as Error).message ?? e));
+    }
+  }, [address, poolPubkey, getAccessToken]);
+
+  useEffect(() => {
+    if (tab !== 'gerenciar' || !isOrganizer) return;
+    loadRequests();
+  }, [tab, isOrganizer, loadRequests]);
+
+  const respondToRequest = useCallback(
+    async (requesterWallet: string, action: 'approve' | 'reject') => {
+      if (!address || requestBusy) return;
+      setRequestBusy(requesterWallet);
+      try {
+        const token = (await getAccessToken()) ?? undefined;
+        await postRequestAction(poolPubkey, address, action, requesterWallet, token);
+        await loadRequests();
+      } catch (e) {
+        setRequestsError(String((e as Error).message ?? e));
+      } finally {
+        setRequestBusy(null);
+      }
+    },
+    [address, poolPubkey, getAccessToken, requestBusy, loadRequests],
+  );
 
   const invite = useCallback(async () => {
     if (!joinCode || inviteBusy) return;
@@ -252,6 +307,14 @@ export function PoolPage({
         <button className={`ac-tab${tab === 'ranking' ? ' active' : ''}`} onClick={() => setTab('ranking')}>
           Ranking
         </button>
+        {isOrganizer && (
+          <button
+            className={`ac-tab${tab === 'gerenciar' ? ' active' : ''}`}
+            onClick={() => setTab('gerenciar')}
+          >
+            Gerenciar
+          </button>
+        )}
       </div>
 
       {tab === 'jogos' && (
@@ -334,6 +397,79 @@ export function PoolPage({
           <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--faint)', marginTop: 12 }}>
             5 pts placar exato · 3 pts saldo de gols · 1 pt vencedor
           </div>
+        </div>
+      )}
+
+      {tab === 'gerenciar' && isOrganizer && (
+        <div style={{ padding: 16 }}>
+          {requestsError && (
+            <p className="ac-screen-body" role="alert" style={{ color: '#B4232A' }}>
+              {requestsError}
+            </p>
+          )}
+          {!requestsError && requests && requests.length === 0 && (
+            <div
+              className="ac-card"
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '40px 24px' }}
+            >
+              <div style={{ fontSize: 34, opacity: 0.35, marginBottom: 12 }}>✅</div>
+              <div className="ac-condensed" style={{ fontWeight: 800, fontSize: 20, color: 'var(--ink)' }}>
+                Nenhum pedido pendente
+              </div>
+            </div>
+          )}
+          {!requestsError && requests && requests.length > 0 && (
+            <div className="ac-card" style={{ padding: 0, overflow: 'hidden' }}>
+              {requests.map((r) => (
+                <div
+                  key={r.wallet}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '12px 14px',
+                    borderBottom: '1px solid var(--line)',
+                  }}
+                >
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
+                    {shortPubkey(r.wallet)}
+                  </span>
+                  <button
+                    style={{
+                      height: 32,
+                      padding: '0 12px',
+                      borderRadius: 8,
+                      border: 'none',
+                      background: '#1B8A3E',
+                      color: '#fff',
+                      fontSize: 13,
+                      fontWeight: 700,
+                    }}
+                    disabled={requestBusy === r.wallet}
+                    onClick={() => respondToRequest(r.wallet, 'approve')}
+                  >
+                    Aprovar
+                  </button>
+                  <button
+                    style={{
+                      height: 32,
+                      padding: '0 12px',
+                      borderRadius: 8,
+                      border: '1px solid var(--input-border)',
+                      background: '#fff',
+                      color: 'var(--ink)',
+                      fontSize: 13,
+                      fontWeight: 700,
+                    }}
+                    disabled={requestBusy === r.wallet}
+                    onClick={() => respondToRequest(r.wallet, 'reject')}
+                  >
+                    Recusar
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
