@@ -4,6 +4,7 @@ import type { Db } from "./db.js";
 import { insertPoolWithJoinCode } from "./joinCodes.js";
 import { encryptPick, type PickPayload } from "./crypto.js";
 import { computeStandings, type EntryProvider } from "./leaderboard.js";
+import { scorePick } from "./scoring.js";
 import { ResultsStore } from "./results.js";
 import { listFixtures } from "./fixtureSync.js";
 import type { WalletVerifier } from "./auth.js";
@@ -38,7 +39,13 @@ export function buildServer({
   app.register(cors, { origin: origins ?? true });
 
   // Fixture list for the app's pick UI (synced from TxLINE or the dev seed).
-  app.get("/fixtures", async () => ({ fixtures: listFixtures(db) }));
+  // Each fixture carries the live/final result when the feed has one.
+  app.get("/fixtures", async () => ({
+    fixtures: listFixtures(db).map((f) => {
+      const r = resultsStore?.get(f.fixtureId);
+      return { ...f, result: r ? { home: r.home, away: r.away, final: r.final } : null };
+    }),
+  }));
 
   // Create pool (design §6): organizer registers the on-chain pool pubkey,
   // backend mints the short join code.
@@ -286,6 +293,65 @@ export function buildServer({
       provisional: resultsStore.hasProvisional(),
     };
   });
+
+  // Everyone's revealed picks per fixture, with the known result and each
+  // pick's points. Safe to expose: entries only reveal on-chain after kickoff,
+  // so nobody can copy a pick that still matters. Emails follow the same
+  // membership gate as the leaderboard.
+  app.get<{ Params: { pubkey: string }; Querystring: { wallet?: string } }>(
+    "/pools/:pubkey/picks",
+    async (req, reply) => {
+      if (!entryProvider) {
+        return reply.code(503).send({ error: "pool picks not configured" });
+      }
+      const poolRow = db
+        .prepare("SELECT pool_pubkey, organizer FROM pools WHERE pool_pubkey = ?")
+        .get(req.params.pubkey) as { pool_pubkey: string; organizer: string } | undefined;
+      if (!poolRow) return reply.code(404).send({ error: "unknown pool" });
+      const memberRows = db
+        .prepare(
+          "SELECT wallet, email_hint FROM members WHERE pool_pubkey = ? AND status = 'member' ORDER BY joined_at",
+        )
+        .all(req.params.pubkey) as { wallet: string; email_hint: string | null }[];
+      const memberSet = new Set(memberRows.map((m) => m.wallet));
+      const emailByWallet = new Map(memberRows.map((m) => [m.wallet, m.email_hint]));
+      const caller = req.query.wallet;
+      let includeEmails = false;
+      if (caller) {
+        const authed = !verifyWallet || (await verifyWallet(req.headers.authorization, caller)).ok;
+        includeEmails = authed && (memberSet.has(caller) || poolRow.organizer === caller);
+      }
+      const entries = await entryProvider.getRevealedEntries(req.params.pubkey);
+      const byFixture = new Map<
+        number,
+        { wallet: string; email: string | null; home: number; away: number; points: number | null }[]
+      >();
+      for (const e of entries) {
+        if (!memberSet.has(e.wallet)) continue;
+        const result = resultsStore?.get(e.fixtureId);
+        const picks = byFixture.get(e.fixtureId) ?? [];
+        picks.push({
+          wallet: e.wallet,
+          email: includeEmails ? (emailByWallet.get(e.wallet) ?? null) : null,
+          home: e.home,
+          away: e.away,
+          points: result ? scorePick({ home: e.home, away: e.away }, result) : null,
+        });
+        byFixture.set(e.fixtureId, picks);
+      }
+      const fixtures = [...byFixture.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([fixtureId, picks]) => {
+          const r = resultsStore?.get(fixtureId);
+          return {
+            fixtureId,
+            result: r ? { home: r.home, away: r.away, final: r.final } : null,
+            picks: picks.sort((a, b) => (b.points ?? -1) - (a.points ?? -1) || a.wallet.localeCompare(b.wallet)),
+          };
+        });
+      return { fixtures };
+    },
+  );
 
   // Store encrypted pick payload (plaintext + salt) for auto-reveal (design §2).
   app.post<{

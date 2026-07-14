@@ -124,6 +124,34 @@ export async function getLeaderboard(
   return res.json();
 }
 
+export interface PoolPick {
+  wallet: string;
+  email: string | null;
+  home: number;
+  away: number;
+  points: number | null;
+}
+
+export interface PoolPicksFixture {
+  fixtureId: number;
+  result: { home: number; away: number; final: boolean } | null;
+  picks: PoolPick[];
+}
+
+/** Everyone's revealed picks per fixture (post-kickoff only, by construction). */
+export async function getPoolPicks(
+  poolPubkey: string,
+  wallet?: string,
+  accessToken?: string,
+): Promise<PoolPicksFixture[]> {
+  const qs = wallet ? `?wallet=${encodeURIComponent(wallet)}` : '';
+  const res = await fetch(`${backendUrl()}/pools/${encodeURIComponent(poolPubkey)}/picks${qs}`, {
+    headers: authHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(`pool picks fetch failed (${res.status})`);
+  return (await res.json()).fixtures;
+}
+
 export interface MyPool {
   poolPubkey: string;
   name: string;

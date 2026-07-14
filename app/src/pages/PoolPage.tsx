@@ -5,10 +5,12 @@ import {
   postPick,
   getLeaderboard,
   getPoolInfo,
+  getPoolPicks,
   getJoinRequests,
   postRequestAction,
   type Standing,
   type JoinRequest,
+  type PoolPick,
 } from '../lib/api';
 import { enqueuePendingPick, retryPendingPicks } from '../lib/pendingPicks';
 import { getFixtures, type Fixture } from '../lib/fixtures';
@@ -74,6 +76,7 @@ export function PoolPage({
   const [requests, setRequests] = useState<JoinRequest[] | null>(null);
   const [requestsError, setRequestsError] = useState<string | null>(null);
   const [requestBusy, setRequestBusy] = useState<string | null>(null);
+  const [poolPicks, setPoolPicks] = useState<Record<number, PoolPick[]>>({});
 
   // Retry payload uploads that failed after their on-chain commit landed.
   useEffect(() => {
@@ -119,6 +122,25 @@ export function PoolPage({
       cancelled = true;
     };
   }, [fixtures, address, poolPubkey, chain]);
+
+  // Everyone's revealed picks (per fixture) — only exist once a match has
+  // kicked off and the auto-reveal ran, so skip the fetch until then.
+  useEffect(() => {
+    if (!fixtures || !fixtures.some((f) => nowTs >= f.kickoffTs)) return;
+    let cancelled = false;
+    (async () =>
+      getPoolPicks(poolPubkey, address ?? undefined, (await getAccessToken()) ?? undefined))()
+      .then((picksByFixture) => {
+        if (cancelled) return;
+        const map: Record<number, PoolPick[]> = {};
+        for (const f of picksByFixture) map[f.fixtureId] = f.picks;
+        setPoolPicks(map);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [fixtures, nowTs, poolPubkey, address, getAccessToken]);
 
   const commit = useCallback(
     async (fixtureId: number, homeGoals: number, awayGoals: number) => {
@@ -334,6 +356,8 @@ export function PoolPage({
                     entry={entries[f.fixtureId] ?? null}
                     nowTs={nowTs}
                     onCommit={commit}
+                    poolPicks={poolPicks[f.fixtureId]}
+                    selfWallet={address ?? undefined}
                   />
                 ))}
               </div>

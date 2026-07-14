@@ -5,6 +5,12 @@ import { backendUrl } from './api';
  * syncs it from TxLINE (or the dev seed when the backend runs TXLINE_STUB=1).
  * No client-side fallback data: a failed fetch surfaces as an error state.
  */
+export interface FixtureResult {
+  home: number;
+  away: number;
+  final: boolean;
+}
+
 export interface Fixture {
   fixtureId: number;
   home: string;
@@ -12,6 +18,8 @@ export interface Fixture {
   homeFlag?: string;
   awayFlag?: string;
   kickoffTs: number; // unix seconds
+  /** Live/final score from the feed; null/absent until the match starts producing events. */
+  result?: FixtureResult | null;
 }
 
 export async function getFixtures(): Promise<Fixture[]> {
