@@ -205,7 +205,7 @@ describe('PoolPage', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Ranking' }));
 
-    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledWith(POOL));
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledWith(POOL, 'PARTICIPANT1', 'test-token'));
     expect(await screen.findByText(/você/)).toBeTruthy();
     expect(screen.getByText(/provisório/)).toBeTruthy();
     // Row with an email shows it instead of the shortened wallet.

@@ -109,9 +109,17 @@ export interface Leaderboard {
   provisional: boolean;
 }
 
-/** Fetch the pool's live standings. */
-export async function getLeaderboard(poolPubkey: string): Promise<Leaderboard> {
-  const res = await fetch(`${backendUrl()}/pools/${encodeURIComponent(poolPubkey)}/leaderboard`);
+/** Fetch the pool's live standings. Wallet+token prove membership → emails included. */
+export async function getLeaderboard(
+  poolPubkey: string,
+  wallet?: string,
+  accessToken?: string,
+): Promise<Leaderboard> {
+  const qs = wallet ? `?wallet=${encodeURIComponent(wallet)}` : '';
+  const res = await fetch(
+    `${backendUrl()}/pools/${encodeURIComponent(poolPubkey)}/leaderboard${qs}`,
+    { headers: authHeaders(accessToken) },
+  );
   if (!res.ok) throw new Error(`leaderboard fetch failed (${res.status})`);
   return res.json();
 }

@@ -166,7 +166,8 @@ export function PoolPage({
   useEffect(() => {
     if (tab !== 'ranking') return;
     let cancelled = false;
-    getLeaderboard(poolPubkey)
+    (async () =>
+      getLeaderboard(poolPubkey, address ?? undefined, (await getAccessToken()) ?? undefined))()
       .then((lb) => {
         if (cancelled) return;
         setStandings(lb.standings);
@@ -177,7 +178,7 @@ export function PoolPage({
     return () => {
       cancelled = true;
     };
-  }, [tab, poolPubkey]);
+  }, [tab, poolPubkey, address, getAccessToken]);
 
   useEffect(() => {
     if (!address) return;

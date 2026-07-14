@@ -49,7 +49,8 @@ describe("GET /pools/:pubkey/leaderboard", () => {
     store.apply({ fixtureId: 1, homeGoals: 2, awayGoals: 1, final: true });
     store.apply({ fixtureId: 2, homeGoals: 1, awayGoals: 1, final: false });
 
-    const res = await app.inject({ method: "GET", url: `/pools/${POOL}/leaderboard` });
+    // Member caller (dev mode, no verifier) sees emails.
+    const res = await app.inject({ method: "GET", url: `/pools/${POOL}/leaderboard?wallet=Alice` });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
       updatedAt: 42,
@@ -61,6 +62,14 @@ describe("GET /pools/:pubkey/leaderboard", () => {
       ],
     });
     expect(requestedPools).toEqual([POOL]);
+
+    // Anonymous callers get standings but NO emails (PII gate).
+    const anon = await app.inject({ method: "GET", url: `/pools/${POOL}/leaderboard` });
+    expect(anon.json().standings.map((s: { email: string | null }) => s.email)).toEqual([
+      null,
+      null,
+      null,
+    ]);
   });
 
   it("provisional flips false once every result is final", async () => {

@@ -246,7 +246,9 @@ export function buildServer({
   });
 
   // Leaderboard (design §3/§4): revealed on-chain entries × TxLINE results.
-  app.get<{ Params: { pubkey: string } }>("/pools/:pubkey/leaderboard", async (req, reply) => {
+  app.get<{ Params: { pubkey: string }; Querystring: { wallet?: string } }>(
+    "/pools/:pubkey/leaderboard",
+    async (req, reply) => {
     if (!entryProvider || !resultsStore) {
       return reply.code(503).send({ error: "leaderboard not configured" });
     }
@@ -262,9 +264,21 @@ export function buildServer({
     const members = memberRows.map((m) => m.wallet);
     const emailByWallet = new Map(memberRows.map((m) => [m.wallet, m.email_hint]));
     const entries = await entryProvider.getRevealedEntries(req.params.pubkey);
+    // Emails are member PII: include them only when the caller proves they are
+    // a member (or the organizer) — same gate as the join code on GET /pools/:pubkey.
+    const caller = req.query.wallet;
+    let includeEmails = false;
+    if (caller) {
+      const authed = !verifyWallet || (await verifyWallet(req.headers.authorization, caller)).ok;
+      const organizerRow = db
+        .prepare("SELECT organizer FROM pools WHERE pool_pubkey = ?")
+        .get(req.params.pubkey) as { organizer: string } | undefined;
+      includeEmails =
+        authed && (members.includes(caller) || organizerRow?.organizer === caller);
+    }
     const standings = computeStandings(members, entries, resultsStore.scorelines()).map((s) => ({
       ...s,
-      email: emailByWallet.get(s.wallet) ?? null,
+      email: includeEmails ? (emailByWallet.get(s.wallet) ?? null) : null,
     }));
     return {
       standings,
