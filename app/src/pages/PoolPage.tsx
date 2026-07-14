@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { postFaucet, postPick } from '../lib/api';
+import { postFaucet, postPick, getLeaderboard, getPoolInfo, type Standing } from '../lib/api';
 import { enqueuePendingPick, retryPendingPicks } from '../lib/pendingPicks';
 import { getFixtures, type Fixture } from '../lib/fixtures';
 import { computeCommitment, deriveSalt } from '../lib/commitment';
@@ -55,6 +55,12 @@ export function PoolPage({
   const [entries, setEntries] = useState<Record<number, EntryState | null>>({});
   const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useState<'jogos' | 'ranking'>('jogos');
+  const [standings, setStandings] = useState<Standing[] | null>(null);
+  const [provisional, setProvisional] = useState(false);
+  const [rankingError, setRankingError] = useState<string | null>(null);
+  const [joinCode, setJoinCode] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [inviteBusy, setInviteBusy] = useState(false);
 
   // Retry payload uploads that failed after their on-chain commit landed.
   useEffect(() => {
@@ -144,6 +150,47 @@ export function PoolPage({
     [wallet, address, poolPubkey, chain, getAccessToken],
   );
 
+  useEffect(() => {
+    if (tab !== 'ranking') return;
+    let cancelled = false;
+    getLeaderboard(poolPubkey)
+      .then((lb) => {
+        if (cancelled) return;
+        setStandings(lb.standings);
+        setProvisional(lb.provisional);
+        setRankingError(null);
+      })
+      .catch((e) => !cancelled && setRankingError(String((e as Error).message ?? e)));
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, poolPubkey]);
+
+  useEffect(() => {
+    if (!address) return;
+    let cancelled = false;
+    getAccessToken()
+      .then((token) => getPoolInfo(poolPubkey, address, token ?? undefined))
+      .then((info) => !cancelled && setJoinCode(info.joinCode ?? null))
+      .catch(() => !cancelled && setJoinCode(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [address, poolPubkey, getAccessToken]);
+
+  const invite = useCallback(async () => {
+    if (!joinCode || inviteBusy) return;
+    setInviteBusy(true);
+    try {
+      const link = `${window.location.origin}/j/${joinCode}`;
+      await navigator.clipboard?.writeText(link).catch(() => undefined);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2500);
+    } finally {
+      setInviteBusy(false);
+    }
+  }, [joinCode, inviteBusy]);
+
   if (!authenticated) {
     return (
       <div className="ac-center-screen">
@@ -184,8 +231,18 @@ export function PoolPage({
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <div className="ac-pool-header">
+      <div className="ac-pool-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div className="ac-pool-name">Bolão {shortPubkey(poolPubkey)}</div>
+        {joinCode && (
+          <button
+            className="ac-primary-btn"
+            style={{ width: 'auto', height: 34, padding: '0 14px', fontSize: 13 }}
+            onClick={invite}
+            disabled={inviteBusy}
+          >
+            {linkCopied ? 'Link copiado ✓' : 'Convidar'}
+          </button>
+        )}
       </div>
 
       <div className="ac-tabs">
@@ -223,19 +280,57 @@ export function PoolPage({
 
       {tab === 'ranking' && (
         <div style={{ padding: 16 }}>
-          {/* TODO(docs/DECISIONS.md#leaderboard-computation): live standings from the score stream. */}
-          <div
-            className="ac-card"
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '40px 24px' }}
-          >
-            <div style={{ fontSize: 34, opacity: 0.35, marginBottom: 12 }}>🏆</div>
-            <div className="ac-condensed" style={{ fontWeight: 800, fontSize: 20, color: 'var(--ink)' }}>
-              Ninguém pontuou ainda
-            </div>
-            <p style={{ fontSize: 14, lineHeight: 1.4, color: 'var(--muted)', margin: '6px 0 0', maxWidth: 250 }}>
-              O ranking aparece assim que o primeiro jogo terminar. Faça seus palpites!
+          {rankingError && (
+            <p className="ac-screen-body" role="alert" style={{ color: '#B4232A' }}>
+              {rankingError}
             </p>
-          </div>
+          )}
+          {!rankingError && standings && standings.length === 0 && (
+            <div
+              className="ac-card"
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '40px 24px' }}
+            >
+              <div style={{ fontSize: 34, opacity: 0.35, marginBottom: 12 }}>🏆</div>
+              <div className="ac-condensed" style={{ fontWeight: 800, fontSize: 20, color: 'var(--ink)' }}>
+                Ninguém pontuou ainda
+              </div>
+              <p style={{ fontSize: 14, lineHeight: 1.4, color: 'var(--muted)', margin: '6px 0 0', maxWidth: 250 }}>
+                O ranking aparece assim que o primeiro jogo terminar. Faça seus palpites!
+              </p>
+            </div>
+          )}
+          {!rankingError && standings && standings.length > 0 && (
+            <div className="ac-card" style={{ padding: 0, overflow: 'hidden' }}>
+              {provisional && (
+                <div style={{ padding: '8px 14px', fontSize: 12, color: 'var(--muted)', background: 'var(--blue-soft)' }}>
+                  Ranking provisório — ainda há jogos em andamento
+                </div>
+              )}
+              {standings.map((s) => (
+                <div
+                  key={s.wallet}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '12px 14px',
+                    borderBottom: '1px solid var(--line)',
+                  }}
+                >
+                  <span style={{ width: 24, fontWeight: 800, color: 'var(--muted)', fontSize: 14 }}>
+                    {s.rank}
+                  </span>
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
+                    {shortPubkey(s.wallet)}
+                    {s.wallet === address && ' (você)'}
+                  </span>
+                  <span className="ac-condensed" style={{ fontWeight: 800, fontSize: 16, color: 'var(--ink)' }}>
+                    {s.points} pts
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           <div style={{ textAlign: 'center', fontSize: 12, color: 'var(--faint)', marginTop: 12 }}>
             5 pts placar exato · 3 pts saldo de gols · 1 pt vencedor
           </div>

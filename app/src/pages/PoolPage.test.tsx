@@ -37,10 +37,12 @@ vi.mock('../lib/commitment', () => ({
 vi.mock('../lib/api', () => ({
   postPick: vi.fn(async () => undefined),
   postFaucet: vi.fn(async () => undefined),
+  getLeaderboard: vi.fn(async () => ({ standings: [], updatedAt: 0, provisional: false })),
+  getPoolInfo: vi.fn(async () => ({ poolPubkey: 'POOLPUBKEY11', name: 'P' })),
 }));
 
 import { deriveSalt, computeCommitment } from '../lib/commitment';
-import { postPick, postFaucet } from '../lib/api';
+import { postPick, postFaucet, getLeaderboard, getPoolInfo } from '../lib/api';
 
 const NOW = 1_781_000_000;
 const POOL = 'POOLPUBKEY11';
@@ -178,5 +180,69 @@ describe('PoolPage', () => {
     await waitFor(() =>
       expect(JSON.parse(localStorage.getItem('acertana.pendingPicks') ?? '[]')).toHaveLength(0),
     );
+  });
+
+  it('ranking tab: fetches and lists standings, marks own row, shows provisional badge', async () => {
+    vi.mocked(getLeaderboard).mockResolvedValueOnce({
+      standings: [
+        { rank: 1, wallet: 'PARTICIPANT1', points: 8, exact: 1, diff: 1, result: 0, scored: 2 },
+        { rank: 2, wallet: 'OtherWallet1', points: 1, exact: 0, diff: 0, result: 1, scored: 2 },
+      ],
+      updatedAt: 42,
+      provisional: true,
+    });
+    render(
+      <PoolPage poolPubkey={POOL} chainClient={mockChain()} fixtures={[fixture()]} nowTs={NOW} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Ranking' }));
+
+    await waitFor(() => expect(getLeaderboard).toHaveBeenCalledWith(POOL));
+    expect(await screen.findByText(/você/)).toBeTruthy();
+    expect(screen.getByText(/provisório/)).toBeTruthy();
+    expect(screen.getByText('8 pts')).toBeTruthy();
+    expect(screen.getByText('1 pts')).toBeTruthy();
+  });
+
+  it('ranking tab: empty state when no one has scored', async () => {
+    vi.mocked(getLeaderboard).mockResolvedValueOnce({
+      standings: [],
+      updatedAt: 0,
+      provisional: false,
+    });
+    render(
+      <PoolPage poolPubkey={POOL} chainClient={mockChain()} fixtures={[fixture()]} nowTs={NOW} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Ranking' }));
+    expect(await screen.findByText('Ninguém pontuou ainda')).toBeTruthy();
+  });
+
+  it('share: shows Convidar button once joinCode resolves, copies link on click', async () => {
+    vi.mocked(getPoolInfo).mockResolvedValueOnce({
+      poolPubkey: POOL,
+      name: 'P',
+      joinCode: 'ABC123',
+    });
+    const writeText = vi.fn(async () => undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    render(
+      <PoolPage poolPubkey={POOL} chainClient={mockChain()} fixtures={[fixture()]} nowTs={NOW} />,
+    );
+
+    const button = await screen.findByRole('button', { name: 'Convidar' });
+    fireEvent.click(button);
+
+    await waitFor(() =>
+      expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/j/ABC123`),
+    );
+    expect(await screen.findByText('Link copiado ✓')).toBeTruthy();
+  });
+
+  it('share: hides Convidar button when the wallet has no join code access', async () => {
+    render(
+      <PoolPage poolPubkey={POOL} chainClient={mockChain()} fixtures={[fixture()]} nowTs={NOW} />,
+    );
+    await waitFor(() => expect(getPoolInfo).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Convidar' })).toBeNull();
   });
 });
