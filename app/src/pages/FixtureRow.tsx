@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { Fixture } from '../lib/fixtures';
 import type { EntryState } from '../lib/chain/ChainClient';
 import { describeCommitError } from '../lib/commitError';
+import { teamName, teamFlag } from '../lib/teams';
 
 export type FixtureStatus = 'open' | 'committed' | 'locked' | 'revealed';
 
@@ -62,7 +63,11 @@ export function FixtureRow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const status = fixtureStatus(fixture, entry, nowTs);
-  const label = `${fixture.home} vs ${fixture.away}`;
+  const homeName = teamName(fixture.home);
+  const awayName = teamName(fixture.away);
+  const homeFlag = fixture.homeFlag ?? teamFlag(fixture.home);
+  const awayFlag = fixture.awayFlag ?? teamFlag(fixture.away);
+  const label = `${homeName} vs ${awayName}`;
   const time = kickoffTime(fixture.kickoffTs);
   const step = (v: number, d: number) => Math.max(0, Math.min(9, v + d));
 
@@ -93,11 +98,11 @@ export function FixtureRow({
           <span className="ac-fx-time" style={{ color: '#A99C7E' }}>⏱ {time}</span>
           <span className="ac-badge-late">Prazo encerrado</span>
         </div>
-        <TeamRow flag={fixture.homeFlag} name={fixture.home} dim>
+        <TeamRow flag={homeFlag} name={homeName} dim>
           <span className="ac-step-val" style={{ minWidth: 36, fontSize: 22, color: '#C3B893' }}>—</span>
         </TeamRow>
         <div className="ac-fx-divider" style={{ background: '#EFE6D0' }} />
-        <TeamRow flag={fixture.awayFlag} name={fixture.away} dim>
+        <TeamRow flag={awayFlag} name={awayName} dim>
           <span className="ac-step-val" style={{ minWidth: 36, fontSize: 22, color: '#C3B893' }}>—</span>
         </TeamRow>
         <div className="ac-fx-footnote" style={{ color: '#A9925A', fontWeight: 600, fontSize: 12 }}>
@@ -119,11 +124,11 @@ export function FixtureRow({
           </span>
           <span className="ac-badge-saved">Seu palpite: {entry.homeGoals} – {entry.awayGoals}</span>
         </div>
-        <TeamRow flag={fixture.homeFlag} name={fixture.home}>
+        <TeamRow flag={homeFlag} name={homeName}>
           <span className="ac-score-box">{entry.homeGoals}</span>
         </TeamRow>
         <div className="ac-fx-divider" />
-        <TeamRow flag={fixture.awayFlag} name={fixture.away}>
+        <TeamRow flag={awayFlag} name={awayName}>
           <span className="ac-score-box">{entry.awayGoals}</span>
         </TeamRow>
       </div>
@@ -137,12 +142,12 @@ export function FixtureRow({
           <span className="ac-fx-time">⏱ {time}</span>
           <span className="ac-badge-saved">🔒 Palpite salvo</span>
         </div>
-        <TeamRow flag={fixture.homeFlag} name={fixture.home}>
+        <TeamRow flag={homeFlag} name={homeName}>
           {/* Pick is committed on-chain as a hash; the score stays hidden until reveal. */}
           <span className="ac-score-box">•</span>
         </TeamRow>
         <div className="ac-fx-divider" />
-        <TeamRow flag={fixture.awayFlag} name={fixture.away}>
+        <TeamRow flag={awayFlag} name={awayName}>
           <span className="ac-score-box">•</span>
         </TeamRow>
         <div className="ac-fx-footnote">Palpite travado · resolve às {time}</div>
@@ -156,7 +161,7 @@ export function FixtureRow({
         <span className="ac-fx-time">⏱ {time}</span>
         <span className="ac-badge-open">Aberto</span>
       </div>
-      <TeamRow flag={fixture.homeFlag} name={fixture.home}>
+      <TeamRow flag={homeFlag} name={homeName}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <button
             className="ac-step-btn"
@@ -178,7 +183,7 @@ export function FixtureRow({
         </div>
       </TeamRow>
       <div className="ac-fx-divider" />
-      <TeamRow flag={fixture.awayFlag} name={fixture.away}>
+      <TeamRow flag={awayFlag} name={awayName}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           <button
             className="ac-step-btn"
