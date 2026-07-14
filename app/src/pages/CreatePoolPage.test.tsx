@@ -60,8 +60,27 @@ describe('CreatePoolPage', () => {
       'ORGANIZER1',
       'POOLPDA1',
       'test-token',
+      false,
     );
     expect(screen.getByTestId('join-link').textContent).toContain('/j/ABC123');
+  });
+
+  it('passes requiresApproval when the checkbox is checked', async () => {
+    render(<CreatePoolPage chainClient={chain} />);
+    fireEvent.change(screen.getByLabelText('Nome do bolão'), {
+      target: { value: 'Bolão dos amigos' },
+    });
+    fireEvent.click(screen.getByLabelText('Aprovar entradas manualmente'));
+    fireEvent.click(screen.getByRole('button', { name: 'Criar bolão' }));
+
+    await waitFor(() => expect(screen.getByTestId('join-link')).toBeTruthy());
+    expect(postCreatePool).toHaveBeenCalledWith(
+      'Bolão dos amigos',
+      'ORGANIZER1',
+      'POOLPDA1',
+      'test-token',
+      true,
+    );
   });
 
   it('surfaces chain errors and re-enables the button', async () => {

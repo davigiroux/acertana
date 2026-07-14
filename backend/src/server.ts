@@ -42,20 +42,24 @@ export function buildServer({
 
   // Create pool (design §6): organizer registers the on-chain pool pubkey,
   // backend mints the short join code.
-  app.post<{ Body: { name?: string; organizer?: string; poolPubkey?: string } }>(
-    "/pools",
-    async (req, reply) => {
-      const { name, organizer, poolPubkey } = req.body ?? {};
-      if (!name || !organizer || !poolPubkey) {
-        return reply.code(400).send({ error: "name, organizer, poolPubkey required" });
-      }
-      if (verifyWallet && !(await verifyWallet(req.headers.authorization, organizer))) {
-        return reply.code(401).send({ error: "invalid auth token for organizer" });
-      }
-      const joinCode = insertPoolWithJoinCode(db, { poolPubkey, name, organizer });
-      return reply.code(201).send({ joinCode, poolPubkey });
-    },
-  );
+  app.post<{
+    Body: { name?: string; organizer?: string; poolPubkey?: string; requiresApproval?: boolean };
+  }>("/pools", async (req, reply) => {
+    const { name, organizer, poolPubkey, requiresApproval } = req.body ?? {};
+    if (!name || !organizer || !poolPubkey) {
+      return reply.code(400).send({ error: "name, organizer, poolPubkey required" });
+    }
+    if (verifyWallet && !(await verifyWallet(req.headers.authorization, organizer))) {
+      return reply.code(401).send({ error: "invalid auth token for organizer" });
+    }
+    const joinCode = insertPoolWithJoinCode(db, {
+      poolPubkey,
+      name,
+      organizer,
+      requiresApproval: !!requiresApproval,
+    });
+    return reply.code(201).send({ joinCode, poolPubkey });
+  });
 
   // Resolve join code -> pool.
   app.get<{ Params: { code: string } }>("/j/:code", async (req, reply) => {
@@ -77,26 +81,26 @@ export function buildServer({
         | undefined;
       if (!row) return reply.code(404).send({ error: "unknown pool" });
       const { wallet } = req.query ?? {};
+      const isActiveMember = (w: string) =>
+        !!db
+          .prepare(
+            "SELECT 1 FROM members WHERE pool_pubkey = ? AND wallet = ? AND status = 'member'",
+          )
+          .get(req.params.pubkey, w);
       let isMember = false;
       if (wallet) {
         if (verifyWallet) {
           isMember =
             (await verifyWallet(req.headers.authorization, wallet)) &&
-            (wallet === row.organizer ||
-              !!db
-                .prepare("SELECT 1 FROM members WHERE pool_pubkey = ? AND wallet = ?")
-                .get(req.params.pubkey, wallet));
+            (wallet === row.organizer || isActiveMember(wallet));
         } else {
-          isMember =
-            wallet === row.organizer ||
-            !!db
-              .prepare("SELECT 1 FROM members WHERE pool_pubkey = ? AND wallet = ?")
-              .get(req.params.pubkey, wallet);
+          isMember = wallet === row.organizer || isActiveMember(wallet);
         }
       }
       return {
         poolPubkey: row.pool_pubkey,
         name: row.name,
+        organizer: row.organizer,
         ...(isMember ? { joinCode: row.join_code } : {}),
       };
     },
@@ -131,15 +135,19 @@ export function buildServer({
         return reply.code(401).send({ error: "invalid auth token for wallet" });
       }
       const pool = db
-        .prepare("SELECT pool_pubkey FROM pools WHERE pool_pubkey = ?")
-        .get(req.params.pubkey);
+        .prepare("SELECT pool_pubkey, requires_approval FROM pools WHERE pool_pubkey = ?")
+        .get(req.params.pubkey) as { pool_pubkey: string; requires_approval: number } | undefined;
       if (!pool) return reply.code(404).send({ error: "unknown pool" });
+      const status = pool.requires_approval ? "pending" : "member";
       db.prepare(
-        `INSERT INTO members (pool_pubkey, wallet, email_hint, joined_at)
-         VALUES (?, ?, ?, ?)
+        `INSERT INTO members (pool_pubkey, wallet, email_hint, joined_at, status)
+         VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (pool_pubkey, wallet) DO NOTHING`,
-      ).run(req.params.pubkey, wallet, emailHint ?? null, Math.floor(Date.now() / 1000));
-      return { poolPubkey: req.params.pubkey, wallet };
+      ).run(req.params.pubkey, wallet, emailHint ?? null, Math.floor(Date.now() / 1000), status);
+      const existing = db
+        .prepare("SELECT status FROM members WHERE pool_pubkey = ? AND wallet = ?")
+        .get(req.params.pubkey, wallet) as { status: string } | undefined;
+      return { poolPubkey: req.params.pubkey, wallet, status: existing?.status ?? status };
     },
   );
 
@@ -150,7 +158,7 @@ export function buildServer({
     if (!pool) return reply.code(404).send({ error: "unknown pool" });
     const members = db
       .prepare(
-        "SELECT wallet, email_hint, joined_at FROM members WHERE pool_pubkey = ? ORDER BY joined_at",
+        "SELECT wallet, email_hint, joined_at FROM members WHERE pool_pubkey = ? AND status = 'member' ORDER BY joined_at",
       )
       .all(req.params.pubkey) as { wallet: string; email_hint: string | null; joined_at: number }[];
     return {
@@ -160,6 +168,75 @@ export function buildServer({
         joinedAt: m.joined_at,
       })),
     };
+  });
+
+  // Pending join requests (organizer-only) — approval-gated pools.
+  app.get<{ Params: { pubkey: string }; Querystring: { wallet?: string } }>(
+    "/pools/:pubkey/requests",
+    async (req, reply) => {
+      const row = db
+        .prepare("SELECT pool_pubkey, organizer FROM pools WHERE pool_pubkey = ?")
+        .get(req.params.pubkey) as { pool_pubkey: string; organizer: string } | undefined;
+      if (!row) return reply.code(404).send({ error: "unknown pool" });
+      const { wallet } = req.query ?? {};
+      if (!wallet || wallet !== row.organizer) {
+        return reply.code(401).send({ error: "organizer only" });
+      }
+      if (verifyWallet && !(await verifyWallet(req.headers.authorization, wallet))) {
+        return reply.code(401).send({ error: "invalid auth token for organizer" });
+      }
+      const requests = db
+        .prepare(
+          "SELECT wallet, email_hint, joined_at FROM members WHERE pool_pubkey = ? AND status = 'pending' ORDER BY joined_at",
+        )
+        .all(req.params.pubkey) as { wallet: string; email_hint: string | null; joined_at: number }[];
+      return {
+        requests: requests.map((m) => ({
+          wallet: m.wallet,
+          emailHint: m.email_hint,
+          joinedAt: m.joined_at,
+        })),
+      };
+    },
+  );
+
+  // Approve/reject a pending join request (organizer-only).
+  app.post<{
+    Params: { pubkey: string; wallet: string };
+    Body: { action?: "approve" | "reject"; wallet?: string };
+  }>("/pools/:pubkey/requests/:wallet", async (req, reply) => {
+    const row = db
+      .prepare("SELECT pool_pubkey, organizer FROM pools WHERE pool_pubkey = ?")
+      .get(req.params.pubkey) as { pool_pubkey: string; organizer: string } | undefined;
+    if (!row) return reply.code(404).send({ error: "unknown pool" });
+    const { action, wallet: organizerWallet } = req.body ?? {};
+    if (!organizerWallet || organizerWallet !== row.organizer) {
+      return reply.code(401).send({ error: "organizer only" });
+    }
+    if (verifyWallet && !(await verifyWallet(req.headers.authorization, organizerWallet))) {
+      return reply.code(401).send({ error: "invalid auth token for organizer" });
+    }
+    if (action !== "approve" && action !== "reject") {
+      return reply.code(400).send({ error: "action must be 'approve' or 'reject'" });
+    }
+    const requester = req.params.wallet;
+    const pending = db
+      .prepare(
+        "SELECT 1 FROM members WHERE pool_pubkey = ? AND wallet = ? AND status = 'pending'",
+      )
+      .get(req.params.pubkey, requester);
+    if (!pending) return reply.code(404).send({ error: "no pending request for wallet" });
+    if (action === "approve") {
+      db.prepare(
+        "UPDATE members SET status = 'member' WHERE pool_pubkey = ? AND wallet = ?",
+      ).run(req.params.pubkey, requester);
+    } else {
+      db.prepare("DELETE FROM members WHERE pool_pubkey = ? AND wallet = ?").run(
+        req.params.pubkey,
+        requester,
+      );
+    }
+    return { poolPubkey: req.params.pubkey, wallet: requester, status: action === "approve" ? "member" : "rejected" };
   });
 
   // Leaderboard (design §3/§4): revealed on-chain entries × TxLINE results.
@@ -172,8 +249,9 @@ export function buildServer({
       .get(req.params.pubkey);
     if (!pool) return reply.code(404).send({ error: "unknown pool" });
     const members = (
-      db.prepare("SELECT wallet FROM members WHERE pool_pubkey = ? ORDER BY joined_at")
-        .all(req.params.pubkey) as { wallet: string }[]
+      db.prepare(
+        "SELECT wallet FROM members WHERE pool_pubkey = ? AND status = 'member' ORDER BY joined_at",
+      ).all(req.params.pubkey) as { wallet: string }[]
     ).map((m) => m.wallet);
     const entries = await entryProvider.getRevealedEntries(req.params.pubkey);
     return {

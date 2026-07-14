@@ -11,6 +11,7 @@ export function JoinPage({ code }: { code: string }) {
   const { authenticated, ready, address, login, getAccessToken } = useInvisibleWallet();
   const [info, setInfo] = useState<JoinInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
   const joining = useRef(false);
 
   useEffect(() => {
@@ -29,12 +30,30 @@ export function JoinPage({ code }: { code: string }) {
     joining.current = true;
     getAccessToken()
       .then((token) => postJoin(info.poolPubkey, address, token ?? undefined))
-      .then(() => navigate(`/p/${info.poolPubkey}`))
+      .then((status) => {
+        if (status === 'pending') {
+          setPending(true);
+        } else {
+          navigate(`/p/${info.poolPubkey}`);
+        }
+      })
       .catch((e) => {
         joining.current = false;
         setError(String(e.message ?? e));
       });
   }, [info, authenticated, ready, address, getAccessToken]);
+
+  if (pending) {
+    return (
+      <div className="ac-center-screen">
+        <div className="ac-icon-tile" style={{ background: '#FBF0DE' }}>⏳</div>
+        <div className="ac-screen-title">Pedido enviado</div>
+        <p className="ac-screen-body">
+          Pedido enviado — aguardando aprovação do organizador.
+        </p>
+      </div>
+    );
+  }
 
   if (error) {
     return (

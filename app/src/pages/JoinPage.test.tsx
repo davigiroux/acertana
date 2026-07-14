@@ -35,7 +35,7 @@ describe('JoinPage', () => {
     });
     window.history.pushState(null, '', '/j/ABC123');
     vi.mocked(getJoinInfo).mockResolvedValue({ poolPubkey: 'POOLPUBKEY', name: 'Office Pool' });
-    vi.mocked(postJoin).mockResolvedValue(undefined);
+    vi.mocked(postJoin).mockResolvedValue('member');
   });
   afterEach(cleanup);
 
@@ -63,5 +63,21 @@ describe('JoinPage', () => {
       'textContent',
       expect.stringContaining('404'),
     );
+  });
+
+  it('shows a pending state instead of navigating when the pool requires approval', async () => {
+    vi.mocked(postJoin).mockResolvedValue('pending');
+    const { rerender } = render(<JoinPage code="ABC123" />);
+
+    expect(await screen.findByText(/Office Pool/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /entrar com e-mail/i }));
+
+    Object.assign(walletState, { authenticated: true, ready: true, address: 'WALLET111' });
+    rerender(<JoinPage code="ABC123" />);
+
+    expect(
+      await screen.findByText(/Pedido enviado — aguardando aprovação do organizador/),
+    ).toBeTruthy();
+    expect(window.location.pathname).not.toBe('/p/POOLPUBKEY');
   });
 });

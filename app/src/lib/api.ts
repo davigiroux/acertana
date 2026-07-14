@@ -21,17 +21,21 @@ function authHeaders(accessToken?: string): Record<string, string> {
   return accessToken ? { authorization: `Bearer ${accessToken}` } : {};
 }
 
+export type JoinStatus = 'member' | 'pending';
+
 export async function postJoin(
   poolPubkey: string,
   wallet: string,
   accessToken?: string,
-): Promise<void> {
+): Promise<JoinStatus> {
   const res = await fetch(`${backendUrl()}/pools/${encodeURIComponent(poolPubkey)}/join`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...authHeaders(accessToken) },
     body: JSON.stringify({ wallet }),
   });
   if (!res.ok) throw new Error(`join failed (${res.status})`);
+  const body = (await res.json()) as { status?: JoinStatus };
+  return body.status ?? 'member';
 }
 
 export interface CreatePoolResult {
@@ -45,11 +49,12 @@ export async function postCreatePool(
   organizer: string,
   poolPubkey: string,
   accessToken?: string,
+  requiresApproval?: boolean,
 ): Promise<CreatePoolResult> {
   const res = await fetch(`${backendUrl()}/pools`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...authHeaders(accessToken) },
-    body: JSON.stringify({ name, organizer, poolPubkey }),
+    body: JSON.stringify({ name, organizer, poolPubkey, requiresApproval: !!requiresApproval }),
   });
   if (!res.ok) throw new Error(`pool registration failed (${res.status})`);
   return res.json();
@@ -125,6 +130,7 @@ export async function getMyPools(wallet: string, accessToken?: string): Promise<
 export interface PoolInfo {
   poolPubkey: string;
   name: string;
+  organizer: string;
   joinCode?: string;
 }
 
@@ -140,4 +146,43 @@ export async function getPoolInfo(
   });
   if (!res.ok) throw new Error(`pool info fetch failed (${res.status})`);
   return res.json();
+}
+
+export interface JoinRequest {
+  wallet: string;
+  emailHint: string | null;
+  joinedAt: number;
+}
+
+/** Pending join requests for a pool (organizer-only). */
+export async function getJoinRequests(
+  poolPubkey: string,
+  wallet: string,
+  accessToken?: string,
+): Promise<JoinRequest[]> {
+  const res = await fetch(
+    `${backendUrl()}/pools/${encodeURIComponent(poolPubkey)}/requests?wallet=${encodeURIComponent(wallet)}`,
+    { headers: authHeaders(accessToken) },
+  );
+  if (!res.ok) throw new Error(`join requests fetch failed (${res.status})`);
+  return (await res.json()).requests;
+}
+
+/** Approve or reject a pending join request (organizer-only). */
+export async function postRequestAction(
+  poolPubkey: string,
+  wallet: string,
+  action: 'approve' | 'reject',
+  requesterWallet: string,
+  accessToken?: string,
+): Promise<void> {
+  const res = await fetch(
+    `${backendUrl()}/pools/${encodeURIComponent(poolPubkey)}/requests/${encodeURIComponent(requesterWallet)}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...authHeaders(accessToken) },
+      body: JSON.stringify({ wallet, action }),
+    },
+  );
+  if (!res.ok) throw new Error(`request action failed (${res.status})`);
 }
