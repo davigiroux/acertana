@@ -70,10 +70,10 @@ describe('PoolPage', () => {
       <PoolPage poolPubkey={POOL} chainClient={chain} fixtures={[fixture()]} nowTs={NOW} />,
     );
 
-    const plusHome = screen.getByRole('button', { name: 'Mexico vs Poland home goals plus' });
+    const plusHome = screen.getByRole('button', { name: 'México vs Polônia home goals plus' });
     fireEvent.click(plusHome);
     fireEvent.click(plusHome);
-    fireEvent.click(screen.getByRole('button', { name: 'Mexico vs Poland away goals plus' }));
+    fireEvent.click(screen.getByRole('button', { name: 'México vs Polônia away goals plus' }));
     fireEvent.click(screen.getByRole('button', { name: 'Salvar palpite' }));
 
     await waitFor(() => expect(postPick).toHaveBeenCalled());
