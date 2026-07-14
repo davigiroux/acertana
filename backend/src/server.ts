@@ -66,6 +66,61 @@ export function buildServer({
     return { poolPubkey: row.pool_pubkey, name: row.name };
   });
 
+  // Pool info; joinCode only returned to proven members/organizer (share link stays private).
+  app.get<{ Params: { pubkey: string }; Querystring: { wallet?: string } }>(
+    "/pools/:pubkey",
+    async (req, reply) => {
+      const row = db
+        .prepare("SELECT pool_pubkey, name, join_code, organizer FROM pools WHERE pool_pubkey = ?")
+        .get(req.params.pubkey) as
+        | { pool_pubkey: string; name: string; join_code: string; organizer: string }
+        | undefined;
+      if (!row) return reply.code(404).send({ error: "unknown pool" });
+      const { wallet } = req.query ?? {};
+      let isMember = false;
+      if (wallet) {
+        if (verifyWallet) {
+          isMember =
+            (await verifyWallet(req.headers.authorization, wallet)) &&
+            (wallet === row.organizer ||
+              !!db
+                .prepare("SELECT 1 FROM members WHERE pool_pubkey = ? AND wallet = ?")
+                .get(req.params.pubkey, wallet));
+        } else {
+          isMember =
+            wallet === row.organizer ||
+            !!db
+              .prepare("SELECT 1 FROM members WHERE pool_pubkey = ? AND wallet = ?")
+              .get(req.params.pubkey, wallet);
+        }
+      }
+      return {
+        poolPubkey: row.pool_pubkey,
+        name: row.name,
+        ...(isMember ? { joinCode: row.join_code } : {}),
+      };
+    },
+  );
+
+  // Pools a wallet belongs to (for the "Meus bolões" home list).
+  app.get<{ Params: { wallet: string } }>("/wallets/:wallet/pools", async (req, reply) => {
+    const { wallet } = req.params;
+    if (verifyWallet && !(await verifyWallet(req.headers.authorization, wallet))) {
+      return reply.code(401).send({ error: "invalid auth token for wallet" });
+    }
+    const rows = db
+      .prepare(
+        `SELECT p.pool_pubkey AS pool_pubkey, p.name AS name, m.joined_at AS joined_at
+         FROM members m JOIN pools p ON p.pool_pubkey = m.pool_pubkey
+         WHERE m.wallet = ?
+         ORDER BY m.joined_at DESC`,
+      )
+      .all(wallet) as { pool_pubkey: string; name: string; joined_at: number }[];
+    return {
+      pools: rows.map((r) => ({ poolPubkey: r.pool_pubkey, name: r.name, joinedAt: r.joined_at })),
+    };
+  });
+
   // Join roster (off-chain; no on-chain membership per design §6). Idempotent.
   app.post<{ Params: { pubkey: string }; Body: { wallet?: string; emailHint?: string } }>(
     "/pools/:pubkey/join",

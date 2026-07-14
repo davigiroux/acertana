@@ -1,10 +1,13 @@
 import { CreatePoolPage } from './pages/CreatePoolPage'
 import { JoinPage } from './pages/JoinPage'
 import { PoolPage } from './pages/PoolPage'
+import { MyPoolsPage } from './pages/MyPoolsPage'
 import { matchRoute, navigate, usePath } from './lib/router'
+import { useInvisibleWallet } from './lib/wallet/useInvisibleWallet'
 
 function App() {
   const route = matchRoute(usePath())
+  const { authenticated } = useInvisibleWallet()
   return (
     <div className="ac-phone">
       <header className="ac-appbar">
@@ -18,7 +21,8 @@ function App() {
       {route.name === 'create' && <CreatePoolPage />}
       {route.name === 'join' && <JoinPage code={route.code} />}
       {route.name === 'pool' && <PoolPage poolPubkey={route.poolPubkey} />}
-      {route.name === 'home' && (
+      {route.name === 'home' && authenticated && <MyPoolsPage />}
+      {route.name === 'home' && !authenticated && (
         <div className="ac-center-screen">
           <div className="ac-icon-tile" style={{ background: 'var(--blue-soft)' }}>⚽</div>
           <div className="ac-screen-title">Bolão da Copa</div>

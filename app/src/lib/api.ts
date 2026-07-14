@@ -83,3 +83,61 @@ export async function postPick(payload: PickPayload, accessToken?: string): Prom
   });
   if (!res.ok) throw new Error(`pick upload failed (${res.status})`);
 }
+
+export interface Standing {
+  rank: number;
+  wallet: string;
+  points: number;
+  exact: number;
+  diff: number;
+  result: number;
+  scored: number;
+}
+
+export interface Leaderboard {
+  standings: Standing[];
+  updatedAt: number;
+  provisional: boolean;
+}
+
+/** Fetch the pool's live standings. */
+export async function getLeaderboard(poolPubkey: string): Promise<Leaderboard> {
+  const res = await fetch(`${backendUrl()}/pools/${encodeURIComponent(poolPubkey)}/leaderboard`);
+  if (!res.ok) throw new Error(`leaderboard fetch failed (${res.status})`);
+  return res.json();
+}
+
+export interface MyPool {
+  poolPubkey: string;
+  name: string;
+  joinedAt: number;
+}
+
+/** Pools a wallet has joined, newest first — powers the "Meus bolões" home list. */
+export async function getMyPools(wallet: string, accessToken?: string): Promise<MyPool[]> {
+  const res = await fetch(`${backendUrl()}/wallets/${encodeURIComponent(wallet)}/pools`, {
+    headers: authHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(`pools fetch failed (${res.status})`);
+  return (await res.json()).pools;
+}
+
+export interface PoolInfo {
+  poolPubkey: string;
+  name: string;
+  joinCode?: string;
+}
+
+/** Pool name + (when the wallet proves membership) its invite join code. */
+export async function getPoolInfo(
+  poolPubkey: string,
+  wallet?: string,
+  accessToken?: string,
+): Promise<PoolInfo> {
+  const qs = wallet ? `?wallet=${encodeURIComponent(wallet)}` : '';
+  const res = await fetch(`${backendUrl()}/pools/${encodeURIComponent(poolPubkey)}${qs}`, {
+    headers: authHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(`pool info fetch failed (${res.status})`);
+  return res.json();
+}
