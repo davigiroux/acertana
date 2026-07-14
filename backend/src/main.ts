@@ -12,8 +12,9 @@ import { loadFixtureAuthority, sendViaConnection } from "./fixtureAuthority.js";
 import { runRevealWorker } from "./revealWorker.js";
 
 const connection = new Connection(process.env.RPC_URL ?? "http://127.0.0.1:8899", "confirmed");
-const resultsStore = new ResultsStore();
 const db = openDb();
+// DB-backed: results survive restarts/deploys (the score stream is live-only).
+const resultsStore = new ResultsStore(undefined, db);
 
 let txline: TxlineClient | undefined;
 // Score feed precedence: opt-in stub for local dev; else the real TxLINE SSE
