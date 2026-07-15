@@ -31,24 +31,40 @@ interface TxFixture {
   CompetitionId: number;
 }
 
-/** Raw TxLINE scores stream payload (fields we consume). */
-interface TxScores {
-  fixtureId: number;
-  participant1IsHome?: boolean;
-  statusSoccerId?: unknown;
-  gameState?: string;
-  scoreSoccer?: {
-    Participant1?: { Total?: { Goals?: number } };
-    Participant2?: { Total?: { Goals?: number } };
-  };
+interface TxScoreSoccer {
+  Participant1?: { Total?: { Goals?: number } };
+  Participant2?: { Total?: { Goals?: number } };
 }
 
-/** Soccer statuses that mean the result is final for scoring purposes. */
-const FINAL_STATUSES = new Set(["END", "FET", "FPE"]);
+/**
+ * Raw TxLINE scores payload (stream + snapshot, fields we consume). The live
+ * feed uses PascalCase (per the soccer feed docs); camelCase variants are
+ * kept as fallbacks.
+ */
+interface TxScores {
+  FixtureId?: number;
+  fixtureId?: number;
+  Participant1IsHome?: boolean;
+  participant1IsHome?: boolean;
+  StatusSoccerId?: unknown;
+  statusSoccerId?: unknown;
+  GameState?: string;
+  gameState?: string;
+  ScoreSoccer?: TxScoreSoccer;
+  scoreSoccer?: TxScoreSoccer;
+}
 
-/** statusSoccerId serializes either as a bare string or `{ "END": {} }`. */
+/**
+ * Soccer statuses meaning the result is final for scoring: F=ended,
+ * FET=after extra time, FPE=after penalties (also their numeric phase ids).
+ * Abandoned/Cancelled/Postponed are terminal but have no scorable result.
+ */
+const FINAL_STATUSES = new Set(["F", "FET", "FPE", "5", "10", "13"]);
+
+/** statusSoccerId serializes as a bare string, numeric phase id, or `{ "F": {} }`. */
 export function soccerStatus(status: unknown): string | undefined {
   if (typeof status === "string") return status;
+  if (typeof status === "number") return String(status);
   if (status && typeof status === "object") return Object.keys(status)[0];
   return undefined;
 }
@@ -71,15 +87,22 @@ export function mapFixture(f: TxFixture): Fixture {
 
 /** Map a raw scores payload to a ScoreEvent, or null if it has no usable score. */
 export function mapScoreEvent(s: TxScores): ScoreEvent | null {
-  const p1 = s.scoreSoccer?.Participant1?.Total?.Goals;
-  const p2 = s.scoreSoccer?.Participant2?.Total?.Goals;
-  if (typeof s.fixtureId !== "number" || typeof p1 !== "number" || typeof p2 !== "number") {
+  const fixtureId = s.FixtureId ?? s.fixtureId;
+  const score = s.ScoreSoccer ?? s.scoreSoccer;
+  const p1 = score?.Participant1?.Total?.Goals;
+  const p2 = score?.Participant2?.Total?.Goals;
+  if (typeof fixtureId !== "number" || typeof p1 !== "number" || typeof p2 !== "number") {
+    // Surface shape mismatches (this exact silent-drop hid the camelCase bug),
+    // but skip payloads with no fixture id at all — heartbeats/other events.
+    if (fixtureId !== undefined) {
+      console.warn("txline: unmappable scores payload", JSON.stringify(s).slice(0, 500));
+    }
     return null;
   }
-  const homeFirst = s.participant1IsHome !== false;
-  const status = soccerStatus(s.statusSoccerId) ?? s.gameState;
+  const homeFirst = (s.Participant1IsHome ?? s.participant1IsHome) !== false;
+  const status = soccerStatus(s.StatusSoccerId ?? s.statusSoccerId) ?? s.GameState ?? s.gameState;
   return {
-    fixtureId: s.fixtureId,
+    fixtureId,
     homeGoals: homeFirst ? p1 : p2,
     awayGoals: homeFirst ? p2 : p1,
     final: status !== undefined && FINAL_STATUSES.has(status),
@@ -130,6 +153,21 @@ export class TxlineClient {
     const res = await this.get(`/fixtures/snapshot${qs}`);
     if (!res.ok) throw new Error(`fixtures snapshot failed (${res.status}): ${await res.text()}`);
     return ((await res.json()) as TxFixture[]).map(mapFixture);
+  }
+
+  /**
+   * Latest known score for a fixture from `/scores/snapshot/{fixtureId}`, or
+   * null when TxLINE has none (404) or the payload has no usable score. Used
+   * to backfill results missed while the SSE stream was down.
+   */
+  async fetchScoreSnapshot(fixtureId: number): Promise<ScoreEvent | null> {
+    const res = await this.get(`/scores/snapshot/${fixtureId}`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`scores snapshot failed (${res.status}): ${await res.text()}`);
+    const body = (await res.json()) as TxScores | TxScores[];
+    const payload = Array.isArray(body) ? body[0] : body;
+    if (!payload) return null;
+    return mapScoreEvent(payload);
   }
 
   /**

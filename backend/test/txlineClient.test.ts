@@ -43,11 +43,12 @@ describe("mapFixture", () => {
 });
 
 describe("mapScoreEvent", () => {
+  // The live feed's PascalCase shape (soccer feed docs v1.1).
   const raw = {
-    fixtureId: 17588320,
-    participant1IsHome: true,
-    statusSoccerId: "H11",
-    scoreSoccer: {
+    FixtureId: 17588320,
+    Participant1IsHome: true,
+    StatusSoccerId: "H1",
+    ScoreSoccer: {
       Participant1: { Total: { Goals: 2 } },
       Participant2: { Total: { Goals: 1 } },
     },
@@ -62,25 +63,42 @@ describe("mapScoreEvent", () => {
     });
   });
 
-  it("marks END / FET / FPE as final", () => {
-    for (const status of ["END", "FET", "FPE"]) {
-      expect(mapScoreEvent({ ...raw, statusSoccerId: status })?.final).toBe(true);
+  it("still accepts camelCase payload variants", () => {
+    expect(
+      mapScoreEvent({
+        fixtureId: 17588320,
+        participant1IsHome: false,
+        statusSoccerId: "F",
+        scoreSoccer: raw.ScoreSoccer,
+      }),
+    ).toEqual({ fixtureId: 17588320, homeGoals: 1, awayGoals: 2, final: true });
+  });
+
+  it("marks F / FET / FPE (and their phase ids) as final", () => {
+    for (const status of ["F", "FET", "FPE", 5, 10, 13]) {
+      expect(mapScoreEvent({ ...raw, StatusSoccerId: status })?.final).toBe(true);
+    }
+  });
+
+  it("does not treat in-play or voided statuses as final", () => {
+    for (const status of ["H1", "HT", "H2", "A", "C", "P", "END"]) {
+      expect(mapScoreEvent({ ...raw, StatusSoccerId: status })?.final).toBe(false);
     }
   });
 
   it("handles object-encoded statuses", () => {
-    expect(soccerStatus({ END: {} })).toBe("END");
-    expect(mapScoreEvent({ ...raw, statusSoccerId: { END: {} } })?.final).toBe(true);
+    expect(soccerStatus({ F: {} })).toBe("F");
+    expect(mapScoreEvent({ ...raw, StatusSoccerId: { F: {} } })?.final).toBe(true);
   });
 
   it("swaps goals when participant1 is away", () => {
-    const e = mapScoreEvent({ ...raw, participant1IsHome: false });
+    const e = mapScoreEvent({ ...raw, Participant1IsHome: false });
     expect(e).toMatchObject({ homeGoals: 1, awayGoals: 2 });
   });
 
   it("returns null without a usable score", () => {
-    expect(mapScoreEvent({ fixtureId: 1 })).toBeNull();
-    expect(mapScoreEvent({ ...raw, scoreSoccer: {} })).toBeNull();
+    expect(mapScoreEvent({ FixtureId: 1 })).toBeNull();
+    expect(mapScoreEvent({ ...raw, ScoreSoccer: {} })).toBeNull();
   });
 });
 
@@ -154,5 +172,50 @@ describe("TxlineClient", () => {
     await client.fetchFixtures(20624);
     expect(seen).toContain("startEpochDay=20624");
     expect(seen).toContain("competitionId=72");
+  });
+
+  describe("fetchScoreSnapshot", () => {
+    const snapshot = {
+      FixtureId: 42,
+      StatusSoccerId: "F",
+      ScoreSoccer: {
+        Participant1: { Total: { Goals: 3 } },
+        Participant2: { Total: { Goals: 2 } },
+      },
+    };
+
+    function clientWith(body: BodyInit | null, status = 200): TxlineClient {
+      const fetchImpl = (async (url: string | URL | Request) => {
+        if (String(url).endsWith("/auth/guest/start")) {
+          return new Response(JSON.stringify({ token: "j" }));
+        }
+        expect(String(url)).toContain("/api/scores/snapshot/42");
+        return new Response(body, { status });
+      }) as typeof fetch;
+      return new TxlineClient({ apiOrigin: "https://tx.test", apiToken: "tok", fetchImpl });
+    }
+
+    it("maps a PascalCase snapshot body", async () => {
+      expect(await clientWith(JSON.stringify(snapshot)).fetchScoreSnapshot(42)).toEqual({
+        fixtureId: 42,
+        homeGoals: 3,
+        awayGoals: 2,
+        final: true,
+      });
+    });
+
+    it("unwraps array-wrapped bodies", async () => {
+      const e = await clientWith(JSON.stringify([snapshot])).fetchScoreSnapshot(42);
+      expect(e?.final).toBe(true);
+      expect(await clientWith(JSON.stringify([])).fetchScoreSnapshot(42)).toBeNull();
+    });
+
+    it("returns null on 404", async () => {
+      expect(await clientWith("not found", 404).fetchScoreSnapshot(42)).toBeNull();
+    });
+
+    it("throws on other errors", async () => {
+      await expect(clientWith("boom", 500).fetchScoreSnapshot(42)).rejects.toThrow("500");
+    });
   });
 });
