@@ -6,6 +6,7 @@ import { ChainEntryProvider } from "./leaderboard.js";
 import { ResultsStore } from "./results.js";
 import { loadFixtures, scoreEvents } from "./txline/stub.js";
 import { TxlineClient } from "./txline/client.js";
+import { backfillResults } from "./txline/backfill.js";
 import { kickoffOf, upsertFixtures } from "./fixtureSync.js";
 import { privyWalletVerifier } from "./auth.js";
 import { loadFixtureAuthority, sendViaConnection } from "./fixtureAuthority.js";
@@ -48,6 +49,18 @@ if (process.env.TXLINE_STUB === "1") {
     () => syncFixtures().catch((err) => console.error("fixture sync failed", err)),
     Number(process.env.FIXTURE_SYNC_INTERVAL_MS ?? 6 * 3600_000),
   );
+
+  // Snapshot backfill for results the live stream missed (downtime, SSE gaps):
+  // once after the first fixture sync, then periodically.
+  const backfill = () =>
+    backfillResults(
+      { db, client: txline!, results: resultsStore },
+      Math.floor(Date.now() / 1000),
+    )
+      .then((n) => n > 0 && console.log(`backfilled ${n} results from txline snapshots`))
+      .catch((err) => console.error("results backfill failed", err));
+  backfill();
+  setInterval(backfill, Number(process.env.RESULTS_BACKFILL_INTERVAL_MS ?? 10 * 60_000));
 }
 
 const pickKey = loadKey();
