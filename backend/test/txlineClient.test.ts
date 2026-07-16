@@ -43,19 +43,18 @@ describe("mapFixture", () => {
 });
 
 describe("mapScoreEvent", () => {
-  // The live feed's PascalCase shape (soccer feed docs v1.1).
-  const raw = {
-    FixtureId: 17588320,
-    Participant1IsHome: true,
-    StatusSoccerId: "H1",
-    ScoreSoccer: {
-      Participant1: { Total: { Goals: 2 } },
-      Participant2: { Total: { Goals: 1 } },
-    },
+  const SCORE = {
+    Participant1: { Total: { Goals: 2 } },
+    Participant2: { Total: { Goals: 1 } },
+  };
+  // A Fusion Scores message (soccer feed docs v1.1): FixtureInfo + Update.
+  const goal = {
+    FixtureInfo: { FixtureId: 17588320, Participant1IsHome: true },
+    Update: { Action: "goal", FixtureId: 17588320, StatusId: 2, Score: SCORE, Seq: 52 },
   };
 
-  it("maps a provisional in-play score", () => {
-    expect(mapScoreEvent(raw)).toEqual({
+  it("maps a goal action to a provisional score", () => {
+    expect(mapScoreEvent(goal)).toEqual({
       fixtureId: 17588320,
       homeGoals: 2,
       awayGoals: 1,
@@ -63,42 +62,74 @@ describe("mapScoreEvent", () => {
     });
   });
 
-  it("still accepts camelCase payload variants", () => {
+  it("maps a score-less status action, leaving goals undefined", () => {
+    const e = mapScoreEvent({
+      FixtureInfo: goal.FixtureInfo,
+      Update: { Action: "status", FixtureId: 17588320, StatusId: 5 },
+    });
+    expect(e).toEqual({
+      fixtureId: 17588320,
+      homeGoals: undefined,
+      awayGoals: undefined,
+      final: true,
+    });
+  });
+
+  it("accepts flat (unwrapped) update payloads", () => {
+    expect(mapScoreEvent({ FixtureId: 17588320, StatusId: 5, Score: SCORE })).toEqual({
+      fixtureId: 17588320,
+      homeGoals: 2,
+      awayGoals: 1,
+      final: true,
+    });
+  });
+
+  it("still accepts the legacy scoreSoccer variants", () => {
     expect(
       mapScoreEvent({
         fixtureId: 17588320,
         participant1IsHome: false,
         statusSoccerId: "F",
-        scoreSoccer: raw.ScoreSoccer,
+        scoreSoccer: SCORE,
       }),
     ).toEqual({ fixtureId: 17588320, homeGoals: 1, awayGoals: 2, final: true });
   });
 
-  it("marks F / FET / FPE (and their phase ids) as final", () => {
-    for (const status of ["F", "FET", "FPE", 5, 10, 13]) {
-      expect(mapScoreEvent({ ...raw, StatusSoccerId: status })?.final).toBe(true);
+  it("marks phases F / FET / FPE (ids 5, 10, 13) as final", () => {
+    for (const id of [5, 10, 13]) {
+      expect(mapScoreEvent({ ...goal, Update: { ...goal.Update, StatusId: id } })?.final).toBe(
+        true,
+      );
     }
   });
 
-  it("does not treat in-play or voided statuses as final", () => {
-    for (const status of ["H1", "HT", "H2", "A", "C", "P", "END"]) {
-      expect(mapScoreEvent({ ...raw, StatusSoccerId: status })?.final).toBe(false);
+  it("does not treat in-play or voided phases as final", () => {
+    // 2=H1, 3=HT, 4=H2, 15=Abandoned, 16=Cancelled, 19=Postponed
+    for (const id of [1, 2, 3, 4, 15, 16, 19]) {
+      expect(mapScoreEvent({ ...goal, Update: { ...goal.Update, StatusId: id } })?.final).toBe(
+        false,
+      );
     }
   });
 
-  it("handles object-encoded statuses", () => {
+  it("handles string and object-encoded legacy statuses", () => {
     expect(soccerStatus({ F: {} })).toBe("F");
-    expect(mapScoreEvent({ ...raw, StatusSoccerId: { F: {} } })?.final).toBe(true);
+    expect(mapScoreEvent({ FixtureId: 1, StatusSoccerId: { F: {} }, Score: SCORE })?.final).toBe(
+      true,
+    );
   });
 
   it("swaps goals when participant1 is away", () => {
-    const e = mapScoreEvent({ ...raw, Participant1IsHome: false });
+    const e = mapScoreEvent({
+      ...goal,
+      FixtureInfo: { ...goal.FixtureInfo, Participant1IsHome: false },
+    });
     expect(e).toMatchObject({ homeGoals: 1, awayGoals: 2 });
   });
 
-  it("returns null without a usable score", () => {
+  it("returns null without a score or status", () => {
     expect(mapScoreEvent({ FixtureId: 1 })).toBeNull();
-    expect(mapScoreEvent({ ...raw, ScoreSoccer: {} })).toBeNull();
+    expect(mapScoreEvent({ Update: { Action: "comment" } })).toBeNull();
   });
 });
 
@@ -177,8 +208,8 @@ describe("TxlineClient", () => {
   describe("fetchScoreSnapshot", () => {
     const snapshot = {
       FixtureId: 42,
-      StatusSoccerId: "F",
-      ScoreSoccer: {
+      StatusId: 5,
+      Score: {
         Participant1: { Total: { Goals: 3 } },
         Participant2: { Total: { Goals: 2 } },
       },
@@ -195,7 +226,7 @@ describe("TxlineClient", () => {
       return new TxlineClient({ apiOrigin: "https://tx.test", apiToken: "tok", fetchImpl });
     }
 
-    it("maps a PascalCase snapshot body", async () => {
+    it("maps a single snapshot message", async () => {
       expect(await clientWith(JSON.stringify(snapshot)).fetchScoreSnapshot(42)).toEqual({
         fixtureId: 42,
         homeGoals: 3,
@@ -204,9 +235,18 @@ describe("TxlineClient", () => {
       });
     });
 
-    it("unwraps array-wrapped bodies", async () => {
-      const e = await clientWith(JSON.stringify([snapshot])).fetchScoreSnapshot(42);
-      expect(e?.final).toBe(true);
+    it("folds a message history: last scoreline + latest phase", async () => {
+      const history = [
+        { Update: { Action: "kickoff", FixtureId: 42, StatusId: 2 } },
+        { Update: { Action: "goal", FixtureId: 42, StatusId: 2, Score: snapshot.Score } },
+        { Update: { Action: "status", FixtureId: 42, StatusId: 5 } }, // full-time, no Score
+      ];
+      expect(await clientWith(JSON.stringify(history)).fetchScoreSnapshot(42)).toEqual({
+        fixtureId: 42,
+        homeGoals: 3,
+        awayGoals: 2,
+        final: true,
+      });
       expect(await clientWith(JSON.stringify([])).fetchScoreSnapshot(42)).toBeNull();
     });
 

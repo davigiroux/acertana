@@ -43,13 +43,28 @@ export class ResultsStore {
   apply(event: ScoreEvent): void {
     const existing = this.results.get(event.fixtureId);
     if (existing?.final && !event.final) return;
+    // Status-only events (no goals) merge onto the last known scoreline. A
+    // final without any prior score is a genuine 0-0 (the feed only sends
+    // Score on actions that change it); a non-final one carries no scoreline
+    // information at all, so don't invent a 0-0 entry for it.
+    if (event.homeGoals === undefined && event.awayGoals === undefined) {
+      if (!existing && !event.final) return;
+    }
     const result: FixtureResult = {
       fixtureId: event.fixtureId,
-      home: event.homeGoals,
-      away: event.awayGoals,
+      home: event.homeGoals ?? existing?.home ?? 0,
+      away: event.awayGoals ?? existing?.away ?? 0,
       final: event.final,
       updatedAt: this.now(),
     };
+    if (
+      existing &&
+      existing.home === result.home &&
+      existing.away === result.away &&
+      existing.final === result.final
+    ) {
+      return; // no change — skip the DB write (the stream is chatty)
+    }
     this.results.set(event.fixtureId, result);
     this.db
       ?.prepare(

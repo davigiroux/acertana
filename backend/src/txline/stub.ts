@@ -15,8 +15,9 @@ export interface Fixture {
 
 export interface ScoreEvent {
   fixtureId: number;
-  homeGoals: number;
-  awayGoals: number;
+  /** Absent on status-only feed actions (the feed omits Score when the action doesn't change it). */
+  homeGoals?: number;
+  awayGoals?: number;
   final: boolean;
 }
 
