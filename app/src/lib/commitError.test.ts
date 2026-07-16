@@ -23,6 +23,19 @@ describe('describeCommitError', () => {
     );
   });
 
+  it('maps AccountNotInitialized (missing Fixture PDA) to not-yet-available message', () => {
+    const expected =
+      'Este jogo ainda não está liberado para palpites. Tente novamente em alguns minutos.';
+    expect(describeCommitError(new Error('custom program error: 0xbc4'))).toBe(expected);
+    expect(
+      describeCommitError(
+        new Error(
+          'AnchorError caused by account: fixture. Error Code: AccountNotInitialized. Error Number: 3012. Error Message: The program expected this account to be already initialized.',
+        ),
+      ),
+    ).toBe(expected);
+  });
+
   it('maps "already in use" (Entry PDA exists) to duplicate-pick message', () => {
     expect(describeCommitError(new Error('Allocate: account Address already in use'))).toBe(
       'Você já enviou um palpite para este jogo.',
