@@ -53,6 +53,26 @@ describe("mapScoreEvent", () => {
     Update: { Action: "goal", FixtureId: 17588320, StatusId: 2, Score: SCORE, Seq: 52 },
   };
 
+  it("marks game_finalised actions final (their phase id 100 is undocumented)", () => {
+    const e = mapScoreEvent({
+      FixtureId: 17588320,
+      Action: "game_finalised",
+      StatusId: 100,
+      Score: SCORE,
+    });
+    expect(e).toEqual({ fixtureId: 17588320, homeGoals: 2, awayGoals: 1, final: true });
+  });
+
+  it("treats omitted Goals keys as zero when Score is present", () => {
+    // The live feed omits zero counts: a 0-0 Total has no Goals key at all.
+    const e = mapScoreEvent({
+      FixtureId: 17588320,
+      StatusId: 2,
+      Score: { Participant1: { Total: { Goals: 1 } }, Participant2: { Total: {} } },
+    });
+    expect(e).toMatchObject({ homeGoals: 1, awayGoals: 0 });
+  });
+
   it("maps a goal action to a provisional score", () => {
     expect(mapScoreEvent(goal)).toEqual({
       fixtureId: 17588320,
@@ -235,11 +255,11 @@ describe("TxlineClient", () => {
       });
     });
 
-    it("folds a message history: last scoreline + latest phase", async () => {
+    it("folds a message history in Seq order (the feed's list is unsorted)", async () => {
       const history = [
-        { Update: { Action: "kickoff", FixtureId: 42, StatusId: 2 } },
-        { Update: { Action: "goal", FixtureId: 42, StatusId: 2, Score: snapshot.Score } },
-        { Update: { Action: "status", FixtureId: 42, StatusId: 5 } }, // full-time, no Score
+        { Update: { Action: "status", FixtureId: 42, StatusId: 5, Seq: 90 } }, // full-time, no Score
+        { Update: { Action: "kickoff", FixtureId: 42, StatusId: 2, Seq: 1 } },
+        { Update: { Action: "goal", FixtureId: 42, StatusId: 2, Score: snapshot.Score, Seq: 50 } },
       ];
       expect(await clientWith(JSON.stringify(history)).fetchScoreSnapshot(42)).toEqual({
         fixtureId: 42,

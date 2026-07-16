@@ -72,10 +72,15 @@ interface TxScores extends TxUpdate {
 
 /**
  * Game phases meaning the result is final for scoring: F=ended (5),
- * FET=after extra time (10), FPE=after penalties (13). Abandoned/Cancelled/
- * Postponed are terminal but have no scorable result.
+ * FET=after extra time (10), FPE=after penalties (13), plus 100 — the
+ * undocumented phase on `game_finalised` actions (observed on the live
+ * devnet feed). Abandoned/Cancelled/Postponed are terminal but have no
+ * scorable result.
  */
-const FINAL_STATUSES = new Set(["F", "FET", "FPE", "5", "10", "13"]);
+const FINAL_STATUSES = new Set(["F", "FET", "FPE", "5", "10", "13", "100"]);
+
+/** Actions that mark the result final regardless of the phase id. */
+const FINAL_ACTIONS = new Set(["game_finalised"]);
 
 /** Status serializes as a numeric phase id, bare string, or `{ "F": {} }`. */
 export function soccerStatus(status: unknown): string | undefined {
@@ -111,9 +116,11 @@ export function mapScoreEvent(s: TxScores): ScoreEvent | null {
   const u = s.Update ?? s;
   const fixtureId = u.FixtureId ?? s.FixtureInfo?.FixtureId ?? s.fixtureId;
   const score = u.Score ?? s.ScoreSoccer ?? s.scoreSoccer;
-  const p1 = score?.Participant1?.Total?.Goals;
-  const p2 = score?.Participant2?.Total?.Goals;
-  const hasScore = typeof p1 === "number" && typeof p2 === "number";
+  // Zero counts are omitted from Score totals on the live feed (a 0-0 total
+  // has no Goals key at all), so a present Score means goals are known.
+  const hasScore = !!(score?.Participant1 && score.Participant2);
+  const p1 = score?.Participant1?.Total?.Goals ?? 0;
+  const p2 = score?.Participant2?.Total?.Goals ?? 0;
   const status =
     soccerStatus(u.StatusId ?? s.StatusSoccerId ?? s.statusSoccerId) ?? s.GameState ?? s.gameState;
   if (typeof fixtureId !== "number" || (!hasScore && status === undefined)) {
@@ -130,7 +137,9 @@ export function mapScoreEvent(s: TxScores): ScoreEvent | null {
     fixtureId,
     homeGoals: hasScore ? (homeFirst ? p1 : p2) : undefined,
     awayGoals: hasScore ? (homeFirst ? p2 : p1) : undefined,
-    final: status !== undefined && FINAL_STATUSES.has(status),
+    final:
+      (status !== undefined && FINAL_STATUSES.has(status)) ||
+      (u.Action !== undefined && FINAL_ACTIONS.has(u.Action)),
   };
 }
 
@@ -191,16 +200,22 @@ export class TxlineClient {
     if (!res.ok) throw new Error(`scores snapshot failed (${res.status}): ${await res.text()}`);
     const body = (await res.json()) as TxScores | TxScores[];
     // The scores endpoint returns a message history, not current state — fold
-    // it: last seen scoreline + the latest action's game phase.
+    // it: last seen scoreline + the latest action's game phase. The list is
+    // NOT chronological (observed on the live feed), so order by Seq first.
+    const history = (Array.isArray(body) ? [...body] : [body]).sort(
+      (a, b) => ((a.Update ?? a).Seq ?? 0) - ((b.Update ?? b).Seq ?? 0),
+    );
     let merged: ScoreEvent | undefined;
-    for (const payload of Array.isArray(body) ? body : [body]) {
+    for (const payload of history) {
       const e = mapScoreEvent(payload);
       if (!e) continue;
       merged = {
         fixtureId: e.fixtureId,
         homeGoals: e.homeGoals ?? merged?.homeGoals,
         awayGoals: e.awayGoals ?? merged?.awayGoals,
-        final: e.final,
+        // final-wins, like the ResultsStore: post-game chatter (disconnected,
+        // coverage_update) trails game_finalised in Seq order.
+        final: (merged?.final ?? false) || e.final,
       };
     }
     return merged ?? null;
