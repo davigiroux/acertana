@@ -46,6 +46,29 @@ describe("ResultsStore", () => {
     }
   });
 
+  it("merges status-only events onto the last known scoreline", () => {
+    const store = new ResultsStore(() => 1);
+    // Non-final status with no prior score carries no information — skipped.
+    store.apply({ fixtureId: 1, final: false });
+    expect(store.get(1)).toBeUndefined();
+
+    store.apply({ fixtureId: 1, homeGoals: 2, awayGoals: 1, final: false });
+    store.apply({ fixtureId: 1, final: true }); // full-time action has no Score
+    expect(store.get(1)).toMatchObject({ home: 2, away: 1, final: true });
+
+    // A final with no score ever seen is a genuine 0-0.
+    store.apply({ fixtureId: 2, final: true });
+    expect(store.get(2)).toMatchObject({ home: 0, away: 0, final: true });
+  });
+
+  it("skips no-op reapplies without bumping updatedAt", () => {
+    let t = 10;
+    const store = new ResultsStore(() => t++);
+    store.apply({ fixtureId: 1, homeGoals: 1, awayGoals: 0, final: false });
+    store.apply({ fixtureId: 1, homeGoals: 1, awayGoals: 0, final: false });
+    expect(store.updatedAt()).toBe(10);
+  });
+
   it("never downgrades a final result with a replayed provisional event", () => {
     const store = new ResultsStore(() => 1);
     store.apply({ fixtureId: 1, homeGoals: 2, awayGoals: 1, final: true });

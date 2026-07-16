@@ -31,18 +31,34 @@ interface TxFixture {
   CompetitionId: number;
 }
 
-interface TxScoreSoccer {
+interface TxScorePair {
   Participant1?: { Total?: { Goals?: number } };
   Participant2?: { Total?: { Goals?: number } };
 }
 
 /**
- * Raw TxLINE scores payload (stream + snapshot, fields we consume). The live
- * feed uses PascalCase (per the soccer feed docs); camelCase variants are
- * kept as fallbacks.
+ * One Fusion Scores action (soccer feed docs v1.1): `Score` is present only
+ * on actions that change the scoreline; `StatusId` is the current game phase
+ * and is on every action.
  */
-interface TxScores {
+interface TxUpdate {
   FixtureId?: number;
+  Action?: string;
+  StatusId?: number;
+  Score?: TxScorePair;
+  Seq?: number;
+  Ts?: number;
+}
+
+/**
+ * Raw TxLINE scores payload (stream + snapshot, fields we consume). The
+ * documented shape is a Fusion message `{ FixtureInfo, Update }`; flat and
+ * legacy `scoreSoccer`/`statusSoccerId` variants are kept as fallbacks since
+ * the wrapper's exact serialization has bitten us before.
+ */
+interface TxScores extends TxUpdate {
+  FixtureInfo?: { FixtureId?: number; Participant1IsHome?: boolean };
+  Update?: TxUpdate;
   fixtureId?: number;
   Participant1IsHome?: boolean;
   participant1IsHome?: boolean;
@@ -50,18 +66,23 @@ interface TxScores {
   statusSoccerId?: unknown;
   GameState?: string;
   gameState?: string;
-  ScoreSoccer?: TxScoreSoccer;
-  scoreSoccer?: TxScoreSoccer;
+  ScoreSoccer?: TxScorePair;
+  scoreSoccer?: TxScorePair;
 }
 
 /**
- * Soccer statuses meaning the result is final for scoring: F=ended,
- * FET=after extra time, FPE=after penalties (also their numeric phase ids).
- * Abandoned/Cancelled/Postponed are terminal but have no scorable result.
+ * Game phases meaning the result is final for scoring: F=ended (5),
+ * FET=after extra time (10), FPE=after penalties (13), plus 100 — the
+ * undocumented phase on `game_finalised` actions (observed on the live
+ * devnet feed). Abandoned/Cancelled/Postponed are terminal but have no
+ * scorable result.
  */
-const FINAL_STATUSES = new Set(["F", "FET", "FPE", "5", "10", "13"]);
+const FINAL_STATUSES = new Set(["F", "FET", "FPE", "5", "10", "13", "100"]);
 
-/** statusSoccerId serializes as a bare string, numeric phase id, or `{ "F": {} }`. */
+/** Actions that mark the result final regardless of the phase id. */
+const FINAL_ACTIONS = new Set(["game_finalised"]);
+
+/** Status serializes as a numeric phase id, bare string, or `{ "F": {} }`. */
 export function soccerStatus(status: unknown): string | undefined {
   if (typeof status === "string") return status;
   if (typeof status === "number") return String(status);
@@ -85,27 +106,40 @@ export function mapFixture(f: TxFixture): Fixture {
   };
 }
 
-/** Map a raw scores payload to a ScoreEvent, or null if it has no usable score. */
+/**
+ * Map a raw scores payload to a ScoreEvent, or null if it carries neither a
+ * score nor a status. Goals are optional: status-only actions (e.g. the
+ * full-time "status" action) omit Score, and the ResultsStore merges them
+ * onto the last known scoreline.
+ */
 export function mapScoreEvent(s: TxScores): ScoreEvent | null {
-  const fixtureId = s.FixtureId ?? s.fixtureId;
-  const score = s.ScoreSoccer ?? s.scoreSoccer;
-  const p1 = score?.Participant1?.Total?.Goals;
-  const p2 = score?.Participant2?.Total?.Goals;
-  if (typeof fixtureId !== "number" || typeof p1 !== "number" || typeof p2 !== "number") {
-    // Surface shape mismatches (this exact silent-drop hid the camelCase bug),
-    // but skip payloads with no fixture id at all — heartbeats/other events.
+  const u = s.Update ?? s;
+  const fixtureId = u.FixtureId ?? s.FixtureInfo?.FixtureId ?? s.fixtureId;
+  const score = u.Score ?? s.ScoreSoccer ?? s.scoreSoccer;
+  // Zero counts are omitted from Score totals on the live feed (a 0-0 total
+  // has no Goals key at all), so a present Score means goals are known.
+  const hasScore = !!(score?.Participant1 && score.Participant2);
+  const p1 = score?.Participant1?.Total?.Goals ?? 0;
+  const p2 = score?.Participant2?.Total?.Goals ?? 0;
+  const status =
+    soccerStatus(u.StatusId ?? s.StatusSoccerId ?? s.statusSoccerId) ?? s.GameState ?? s.gameState;
+  if (typeof fixtureId !== "number" || (!hasScore && status === undefined)) {
+    // Surface shape mismatches (a silent drop here hid the original mapping
+    // bug), but skip payloads with no fixture id at all — heartbeats etc.
     if (fixtureId !== undefined) {
       console.warn("txline: unmappable scores payload", JSON.stringify(s).slice(0, 500));
     }
     return null;
   }
-  const homeFirst = (s.Participant1IsHome ?? s.participant1IsHome) !== false;
-  const status = soccerStatus(s.StatusSoccerId ?? s.statusSoccerId) ?? s.GameState ?? s.gameState;
+  const homeFirst =
+    (s.FixtureInfo?.Participant1IsHome ?? s.Participant1IsHome ?? s.participant1IsHome) !== false;
   return {
     fixtureId,
-    homeGoals: homeFirst ? p1 : p2,
-    awayGoals: homeFirst ? p2 : p1,
-    final: status !== undefined && FINAL_STATUSES.has(status),
+    homeGoals: hasScore ? (homeFirst ? p1 : p2) : undefined,
+    awayGoals: hasScore ? (homeFirst ? p2 : p1) : undefined,
+    final:
+      (status !== undefined && FINAL_STATUSES.has(status)) ||
+      (u.Action !== undefined && FINAL_ACTIONS.has(u.Action)),
   };
 }
 
@@ -165,9 +199,26 @@ export class TxlineClient {
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`scores snapshot failed (${res.status}): ${await res.text()}`);
     const body = (await res.json()) as TxScores | TxScores[];
-    const payload = Array.isArray(body) ? body[0] : body;
-    if (!payload) return null;
-    return mapScoreEvent(payload);
+    // The scores endpoint returns a message history, not current state — fold
+    // it: last seen scoreline + the latest action's game phase. The list is
+    // NOT chronological (observed on the live feed), so order by Seq first.
+    const history = (Array.isArray(body) ? [...body] : [body]).sort(
+      (a, b) => ((a.Update ?? a).Seq ?? 0) - ((b.Update ?? b).Seq ?? 0),
+    );
+    let merged: ScoreEvent | undefined;
+    for (const payload of history) {
+      const e = mapScoreEvent(payload);
+      if (!e) continue;
+      merged = {
+        fixtureId: e.fixtureId,
+        homeGoals: e.homeGoals ?? merged?.homeGoals,
+        awayGoals: e.awayGoals ?? merged?.awayGoals,
+        // final-wins, like the ResultsStore: post-game chatter (disconnected,
+        // coverage_update) trails game_finalised in Seq order.
+        final: (merged?.final ?? false) || e.final,
+      };
+    }
+    return merged ?? null;
   }
 
   /**
