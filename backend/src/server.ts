@@ -47,6 +47,15 @@ export function buildServer({
     }),
   }));
 
+  // Public aggregate stats for the landing page's social proof — real numbers,
+  // never inflated. Counts distinct wallets across all pools (approved members only).
+  app.get("/stats", async () => {
+    const row = db
+      .prepare("SELECT COUNT(DISTINCT wallet) AS players FROM members WHERE status = 'member'")
+      .get() as { players: number };
+    return { players: row.players };
+  });
+
   // Create pool (design §6): organizer registers the on-chain pool pubkey,
   // backend mints the short join code.
   app.post<{
