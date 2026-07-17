@@ -141,9 +141,11 @@ input {
   align-items: center;
   gap: 8px;
 }
+/* 22px outer − 2×3px border = 16px inner; 6px dot leaves an even 5px ring
+   on every side, so the dot lands dead-center without subpixel rounding. */
 .ac-logo-mark {
-  width: 21px;
-  height: 21px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   border: 3px solid var(--blue);
   display: flex;
@@ -427,6 +429,45 @@ input {
   font-size: 28px;
   color: var(--ink);
 }
+/* Landing-hero match layout: team on each side, score boxes in the middle.
+   Used by FixtureRow's display-only states (locked/committed/revealed). */
+.ac-match-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 0 8px;
+}
+.ac-match-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 64px;
+}
+.ac-match-side.right {
+  justify-content: flex-end;
+}
+.ac-match-flag {
+  font-size: 22px;
+}
+.ac-match-code {
+  font-family: 'Barlow Condensed';
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  color: var(--ink);
+}
+.ac-match-score {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.ac-match-sep {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--faint);
+}
+
 .ac-score-box {
   min-width: 36px;
   height: 36px;
