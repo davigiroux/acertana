@@ -16,7 +16,9 @@
   letter-spacing: normal;
 }
 
-.landing p {
+/* :where() keeps this reset at zero specificity so single-class rules
+   like .l-cta-p / .l-hero-sub can set their own margins. */
+.landing :where(p) {
   margin: 0;
 }
 
@@ -238,7 +240,7 @@
 .l-hero-grid {
   position: relative;
   z-index: 1;
-  padding: 88px 32px 96px;
+  padding: 120px 32px 128px;
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
   gap: 56px;
@@ -530,7 +532,7 @@
 
 /* Section header */
 .l-section {
-  padding: 96px 32px 40px;
+  padding: 128px 32px 72px;
 }
 
 .l-section-header {
@@ -618,7 +620,7 @@
 
 /* Features */
 .l-features-section {
-  padding: 56px 32px 40px;
+  padding: 88px 32px 72px;
 }
 
 .l-features-grid {
@@ -750,7 +752,7 @@
 
 /* Scoring band */
 .l-scoring-section {
-  padding: 40px 32px 56px;
+  padding: 72px 32px 104px;
 }
 
 .l-scoring-panel {
@@ -853,7 +855,7 @@
 .l-cta-content {
   position: relative;
   z-index: 1;
-  padding: 80px 32px;
+  padding: 112px 32px;
   text-align: center;
 }
 
