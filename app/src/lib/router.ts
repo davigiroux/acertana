@@ -20,12 +20,14 @@ export function navigate(path: string): void {
 
 export type Route =
   | { name: 'home' }
+  | { name: 'myPools' }
   | { name: 'create' }
   | { name: 'join'; code: string }
   | { name: 'pool'; poolPubkey: string }
   | { name: 'notFound' };
 
 export function matchRoute(path: string): Route {
+  if (path === '/home') return { name: 'myPools' };
   if (path === '/novo') return { name: 'create' };
   const join = path.match(/^\/j\/([^/]+)$/);
   if (join) return { name: 'join', code: decodeURIComponent(join[1]) };

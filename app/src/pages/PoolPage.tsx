@@ -312,7 +312,7 @@ export function PoolPage({
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <button className="ac-back-link" onClick={() => navigate('/')}>
+      <button className="ac-back-link" onClick={() => navigate('/home')}>
         ← Meus bolões
       </button>
       <div className="ac-pool-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
