@@ -944,3 +944,21 @@
 .l-user-email-inverse {
   color: #9096a6;
 }
+
+/* Button + "Conectado como …" stack vertically so the button stays on the
+   band/hero centerline instead of being pushed aside by the email text. */
+.l-cta-logged {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.l-hero-left .l-cta-logged {
+  align-items: flex-start;
+}
+@media (max-width: 900px) {
+  .l-hero-left .l-cta-logged {
+    align-items: center;
+  }
+}

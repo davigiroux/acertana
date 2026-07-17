@@ -6,6 +6,13 @@ export function backendUrl(): string {
   return url.replace(/\/$/, '');
 }
 
+/** Aggregate player count for the landing page's social proof. */
+export async function getStats(): Promise<{ players: number }> {
+  const res = await fetch(`${backendUrl()}/stats`);
+  if (!res.ok) throw new Error(`stats lookup failed (${res.status})`);
+  return res.json();
+}
+
 export interface JoinInfo {
   poolPubkey: string;
   name: string;
