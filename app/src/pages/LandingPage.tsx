@@ -87,7 +87,9 @@ function Logo({ markSize, wordmarkClass, markClass }: { markSize: number; wordma
       <span
         className={markClass}
         style={{ width: markSize, height: markSize }}
-      />
+      >
+        <span className="l-mark-dot" />
+      </span>
       <span className={wordmarkClass}>ACERTANA</span>
     </div>
   );
@@ -110,7 +112,7 @@ export function LandingPage() {
     <div className="landing">
       <nav className="l-nav">
         <div className="l-container l-nav-row">
-          <Logo markSize={23} markClass="l-mark" wordmarkClass="l-wordmark" />
+          <Logo markSize={22} markClass="l-mark" wordmarkClass="l-wordmark" />
           <div className="l-nav-links">
             <a className="l-nav-link" href="#como">
               Como funciona
@@ -199,10 +201,12 @@ export function LandingPage() {
               <div className="l-phone-screen">
                 <div className="l-phone-header">
                   <div className="l-phone-logo">
-                    <span className="l-phone-mark" />
+                    <span className="l-phone-mark">
+                      <span className="l-mark-dot" />
+                    </span>
                     <span className="l-phone-wordmark">ACERTANA</span>
                   </div>
-                  <span className="l-invite-pill">🔗 Convidar</span>
+                  <span className="l-invite-pill">Convidar</span>
                 </div>
                 <div className="l-phone-body">
                   <div className="l-phone-title">Jogos de hoje</div>

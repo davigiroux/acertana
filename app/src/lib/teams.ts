@@ -82,3 +82,27 @@ export function teamName(en: string): string {
 export function teamFlag(en: string): string | undefined {
   return TEAMS[en]?.flag;
 }
+
+/** pt-BR broadcast-style trigrams that the first-3-letters rule gets wrong. */
+const CODE_OVERRIDES: Record<string, string> = {
+  'United States': 'EUA',
+  USA: 'EUA',
+  'South Korea': 'COR',
+  'Costa Rica': 'CRC',
+  'South Africa': 'AFS',
+  'Ivory Coast': 'CIV',
+  Wales: 'GAL',
+  'New Zealand': 'NZL',
+  'Saudi Arabia': 'KSA',
+};
+
+/** Short 3-letter display code (pt-BR style: Alemanha → ALE, Suíça → SUI). */
+export function teamCode(en: string): string {
+  const override = CODE_OVERRIDES[en];
+  if (override) return override;
+  return teamName(en)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .slice(0, 3)
+    .toUpperCase();
+}

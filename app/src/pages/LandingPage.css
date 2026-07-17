@@ -68,11 +68,13 @@
   gap: 9px;
 }
 
+/* All landing marks match the app logo: blue ring with a centered dot.
+   Sizes are chosen so the inner gap is a whole pixel on every side. */
 .l-mark {
-  width: 23px;
-  height: 23px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  border: 3.5px solid #2b4bff;
+  border: 3px solid #2b4bff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -84,6 +86,11 @@
   height: 6px;
   border-radius: 50%;
   background: #2b4bff;
+}
+
+.l-phone-mark .l-mark-dot {
+  width: 4px;
+  height: 4px;
 }
 
 .l-wordmark {
@@ -382,6 +389,10 @@
   height: 18px;
   border-radius: 50%;
   border: 3px solid #2b4bff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .l-phone-wordmark {
@@ -391,13 +402,14 @@
   color: #0b0d12;
 }
 
+/* Mirrors the app's solid-blue Convidar button (ac-primary-btn). */
 .l-invite-pill {
-  background: #eaedff;
-  color: #2b4bff;
+  background: #2b4bff;
+  color: #fff;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
-  padding: 5px 10px;
+  padding: 6px 12px;
 }
 
 .l-phone-body {
@@ -891,6 +903,10 @@
   height: 20px;
   border-radius: 50%;
   border: 3px solid #2b4bff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .l-footer-wordmark {
