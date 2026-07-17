@@ -1,25 +1,20 @@
-import { useEffect, useState } from 'react';
-import { getMyPools, type MyPool } from '../lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { getMyPools } from '../lib/api';
 import { navigate } from '../lib/router';
 import { useInvisibleWallet } from '../lib/wallet/useInvisibleWallet';
 
 /** Home screen for logged-in users: their pools, plus the create-pool CTA. */
 export function MyPoolsPage() {
   const { address, getAccessToken } = useInvisibleWallet();
-  const [pools, setPools] = useState<MyPool[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!address) return;
-    let cancelled = false;
-    getAccessToken()
-      .then((token) => getMyPools(address, token ?? undefined))
-      .then((p) => !cancelled && setPools(p))
-      .catch((e) => !cancelled && setError(String((e as Error).message ?? e)));
-    return () => {
-      cancelled = true;
-    };
-  }, [address, getAccessToken]);
+  const { data: pools, error, isPending } = useQuery({
+    queryKey: ['myPools', address],
+    enabled: !!address,
+    queryFn: async () => {
+      const token = await getAccessToken();
+      return getMyPools(address!, token ?? undefined);
+    },
+  });
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '24px 22px', gap: 16 }}>
@@ -27,8 +22,16 @@ export function MyPoolsPage() {
 
       {error && (
         <p className="ac-screen-body" role="alert" style={{ color: '#B4232A' }}>
-          {error}
+          {String((error as Error).message ?? error)}
         </p>
+      )}
+
+      {!error && isPending && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} aria-label="Carregando bolões">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="ac-skel" style={{ height: 50, borderRadius: 16 }} />
+          ))}
+        </div>
       )}
 
       {!error && pools && pools.length === 0 && (
