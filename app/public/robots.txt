@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /home
+Disallow: /novo
+
+Sitemap: https://acertana.app/sitemap.xml

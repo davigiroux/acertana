@@ -1,0 +1,107 @@
+<!doctype html>
+<!-- Source for public/og.png (and app icons). Regenerate with: node assets-src/render-og.mjs -->
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600&family=Barlow+Condensed:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * { margin: 0; box-sizing: border-box; }
+      body {
+        width: 1200px;
+        height: 630px;
+        background: #0b0d12;
+        font-family: 'Barlow', sans-serif;
+        color: #f4f5f8;
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        position: relative;
+      }
+      .glow {
+        position: absolute;
+        width: 900px;
+        height: 900px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(43, 75, 255, 0.28) 0%, rgba(43, 75, 255, 0) 65%);
+        top: -250px;
+        right: -220px;
+      }
+      .ring-bg {
+        position: absolute;
+        right: -140px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 560px;
+        height: 560px;
+        border: 96px solid rgba(43, 75, 255, 0.9);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .ring-bg::after {
+        content: '';
+        width: 130px;
+        height: 130px;
+        border-radius: 50%;
+        background: #2b4bff;
+      }
+      .content { position: relative; padding-left: 88px; max-width: 700px; }
+      .logo { display: flex; align-items: center; gap: 18px; margin-bottom: 42px; }
+      .mark {
+        width: 56px;
+        height: 56px;
+        border: 13px solid #2b4bff;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .mark::after { content: ''; width: 16px; height: 16px; border-radius: 50%; background: #2b4bff; }
+      .word {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-weight: 800;
+        font-size: 52px;
+        letter-spacing: 0.5px;
+      }
+      h1 {
+        font-family: 'Barlow Condensed', sans-serif;
+        font-weight: 800;
+        font-size: 104px;
+        line-height: 0.95;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+      h1 .blue { color: #2b4bff; }
+      p { margin-top: 30px; font-size: 34px; font-weight: 500; color: #b9bfce; }
+      .pill {
+        display: inline-block;
+        margin-top: 34px;
+        padding: 12px 28px;
+        border-radius: 999px;
+        background: #2b4bff;
+        color: #fff;
+        font-weight: 600;
+        font-size: 28px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="glow"></div>
+    <div class="ring-bg"></div>
+    <div class="content">
+      <div class="logo">
+        <div class="mark"></div>
+        <div class="word">Acertana</div>
+      </div>
+      <h1>Bolão da<br />Copa <span class="blue">2026</span></h1>
+      <p>Convide amigos, dê seus palpites e acompanhe o ranking ao vivo.</p>
+      <div class="pill">100% grátis</div>
+    </div>
+  </body>
+</html>
