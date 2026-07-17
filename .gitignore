@@ -11,3 +11,4 @@ test-ledger/
 .keys/
 *.png
 !app/src/assets/*.png
+!app/public/*.png

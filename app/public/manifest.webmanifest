@@ -1,0 +1,14 @@
+{
+  "name": "Acertana — Bolão da Copa 2026",
+  "short_name": "Acertana",
+  "description": "Crie seu bolão da Copa do Mundo 2026 grátis. Convide amigos, faça seus palpites e acompanhe o ranking em tempo real.",
+  "lang": "pt-BR",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#2b4bff",
+  "background_color": "#0b0d12",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

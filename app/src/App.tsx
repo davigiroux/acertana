@@ -5,6 +5,7 @@ import { LandingPage } from './pages/LandingPage'
 import { PoolPage } from './pages/PoolPage'
 import { MyPoolsPage } from './pages/MyPoolsPage'
 import { matchRoute, navigate, usePath } from './lib/router'
+import { titleForRoute } from './lib/seo'
 import { useInvisibleWallet } from './lib/wallet/useInvisibleWallet'
 
 function App() {
@@ -17,6 +18,10 @@ function App() {
   useEffect(() => {
     document.getElementById('root')?.classList.toggle('full-bleed', isLanding)
   }, [isLanding])
+
+  useEffect(() => {
+    document.title = titleForRoute(route)
+  }, [route])
 
   if (isLanding) return <LandingPage />
 
