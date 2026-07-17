@@ -99,6 +99,22 @@ input {
   overflow: hidden;
 }
 
+/* On wide viewports the mobile-width column reads as a bug, not a
+   design choice — give it room and present it as a centered card
+   instead of a strip glued to the left edge. Mobile layout is untouched. */
+@media (min-width: 860px) {
+  .ac-phone {
+    max-width: 640px;
+    margin: 32px 0;
+    border: 1px solid var(--input-border);
+    border-radius: 20px;
+    box-shadow: 0 24px 60px -24px rgba(11, 13, 18, 0.18);
+  }
+  .ac-appbar {
+    border-radius: 20px 20px 0 0;
+  }
+}
+
 .ac-appbar {
   position: sticky;
   top: 0;
@@ -252,6 +268,19 @@ input {
 }
 
 /* ── Pool ── */
+.ac-back-link {
+  display: inline-flex;
+  align-self: flex-start;
+  margin: 16px 0 0 16px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.ac-back-link:hover {
+  color: var(--blue);
+}
 .ac-pool-header {
   padding: 16px 16px 0;
 }

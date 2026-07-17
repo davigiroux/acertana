@@ -21,6 +21,7 @@ import {
   type EntryState,
 } from '../lib/chain/ChainClient';
 import { useInvisibleWallet } from '../lib/wallet/useInvisibleWallet';
+import { navigate } from '../lib/router';
 import { FixtureRow } from './FixtureRow';
 
 function dateGroups(fixtures: Fixture[]): { label: string; items: Fixture[] }[] {
@@ -70,6 +71,7 @@ export function PoolPage({
   const [provisional, setProvisional] = useState(false);
   const [rankingError, setRankingError] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState<string | null>(null);
+  const [poolName, setPoolName] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [isOrganizer, setIsOrganizer] = useState(false);
@@ -211,6 +213,7 @@ export function PoolPage({
         if (cancelled) return;
         setJoinCode(info.joinCode ?? null);
         setIsOrganizer(info.organizer === address);
+        setPoolName(info.name);
       })
       .catch(() => {
         if (cancelled) return;
@@ -309,8 +312,11 @@ export function PoolPage({
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <button className="ac-back-link" onClick={() => navigate('/')}>
+        ← Meus bolões
+      </button>
       <div className="ac-pool-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div className="ac-pool-name">Bolão {shortPubkey(poolPubkey)}</div>
+        <div className="ac-pool-name">{poolName ?? `Bolão ${shortPubkey(poolPubkey)}`}</div>
         {joinCode && (
           <button
             className="ac-primary-btn"
