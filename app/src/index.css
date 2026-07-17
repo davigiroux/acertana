@@ -20,10 +20,19 @@
   --amber-bg: #fbf8f1;
   --amber-border: #eee4ce;
   --amber-text: #9a7b23;
+
+  /* Landing page typography — loaded via Google Fonts link in index.html */
+  --l-sans: 'Barlow', system-ui, 'Segoe UI', Roboto, sans-serif;
+  --l-heading: 'Barlow Condensed', system-ui, 'Segoe UI', Roboto, sans-serif;
 }
 
 * {
   box-sizing: border-box;
+}
+
+#root.full-bleed {
+  width: 100%;
+  border-inline: none;
 }
 
 body {
