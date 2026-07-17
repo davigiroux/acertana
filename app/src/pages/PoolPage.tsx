@@ -45,6 +45,11 @@ function shortPubkey(pk: string): string {
   return pk.length > 12 ? `${pk.slice(0, 4)}…${pk.slice(-4)}` : pk;
 }
 
+// Re-fetch cadence for anything that can change while a match is live
+// (scores, revealed picks, standings). Kept to one shared constant so all
+// three polling loops below move in step.
+const LIVE_POLL_MS = 15_000;
+
 /**
  * /p/:poolPubkey — fixture list with commit-pick flow.
  * `chainClient`, `fixtures`, and `nowTs` are injectable for tests.
@@ -87,14 +92,29 @@ export function PoolPage({
     );
   }, [getAccessToken]);
 
+  // Poll fixture results while any match is live so scores update without a
+  // reload; stop once everything has a final result. Tests inject fixtures
+  // directly via fixturesProp, so this never runs there.
   useEffect(() => {
     if (fixturesProp) return;
     let cancelled = false;
-    getFixtures()
-      .then((f) => !cancelled && setFixtures(f))
-      .catch((e) => !cancelled && setFixturesError(String((e as Error).message ?? e)));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = () => {
+      getFixtures()
+        .then((f) => {
+          if (cancelled) return;
+          setFixtures(f);
+          setFixturesError(null);
+          if (!f.every((x) => x.result?.final)) {
+            timer = setTimeout(load, LIVE_POLL_MS);
+          }
+        })
+        .catch((e) => !cancelled && setFixturesError(String((e as Error).message ?? e)));
+    };
+    load();
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, [fixturesProp]);
 
@@ -126,21 +146,30 @@ export function PoolPage({
   }, [fixtures, address, poolPubkey, chain]);
 
   // Everyone's revealed picks (per fixture) — only exist once a match has
-  // kicked off and the auto-reveal ran, so skip the fetch until then.
+  // kicked off and the auto-reveal ran, so skip polling until then. Keeps
+  // polling afterwards so newly-revealed/updated picks show up live.
   useEffect(() => {
     if (!fixtures || !fixtures.some((f) => nowTs >= f.kickoffTs)) return;
     let cancelled = false;
-    (async () =>
-      getPoolPicks(poolPubkey, address ?? undefined, (await getAccessToken()) ?? undefined))()
-      .then((picksByFixture) => {
-        if (cancelled) return;
-        const map: Record<number, PoolPick[]> = {};
-        for (const f of picksByFixture) map[f.fixtureId] = f.picks;
-        setPoolPicks(map);
-      })
-      .catch(() => undefined);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = () => {
+      (async () =>
+        getPoolPicks(poolPubkey, address ?? undefined, (await getAccessToken()) ?? undefined))()
+        .then((picksByFixture) => {
+          if (cancelled) return;
+          const map: Record<number, PoolPick[]> = {};
+          for (const f of picksByFixture) map[f.fixtureId] = f.picks;
+          setPoolPicks(map);
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (!cancelled) timer = setTimeout(load, LIVE_POLL_MS);
+        });
+    };
+    load();
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, [fixtures, nowTs, poolPubkey, address, getAccessToken]);
 
@@ -187,20 +216,30 @@ export function PoolPage({
     [wallet, address, poolPubkey, chain, getAccessToken],
   );
 
+  // Poll standings while the Ranking tab is open so points update as
+  // matches progress; stops as soon as the user switches tabs.
   useEffect(() => {
     if (tab !== 'ranking') return;
     let cancelled = false;
-    (async () =>
-      getLeaderboard(poolPubkey, address ?? undefined, (await getAccessToken()) ?? undefined))()
-      .then((lb) => {
-        if (cancelled) return;
-        setStandings(lb.standings);
-        setProvisional(lb.provisional);
-        setRankingError(null);
-      })
-      .catch((e) => !cancelled && setRankingError(String((e as Error).message ?? e)));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = () => {
+      (async () =>
+        getLeaderboard(poolPubkey, address ?? undefined, (await getAccessToken()) ?? undefined))()
+        .then((lb) => {
+          if (cancelled) return;
+          setStandings(lb.standings);
+          setProvisional(lb.provisional);
+          setRankingError(null);
+        })
+        .catch((e) => !cancelled && setRankingError(String((e as Error).message ?? e)))
+        .finally(() => {
+          if (!cancelled) timer = setTimeout(load, LIVE_POLL_MS);
+        });
+    };
+    load();
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, [tab, poolPubkey, address, getAccessToken]);
 
