@@ -7,9 +7,10 @@ import { ResultsStore } from "./results.js";
 import { loadFixtures, scoreEvents } from "./txline/stub.js";
 import { TxlineClient } from "./txline/client.js";
 import { backfillResults } from "./txline/backfill.js";
-import { kickoffOf, upsertFixtures } from "./fixtureSync.js";
+import { kickoffOf, registerPendingFixtures, upsertFixtures } from "./fixtureSync.js";
 import { privyWalletVerifier } from "./auth.js";
 import { loadFixtureAuthority, sendViaConnection } from "./fixtureAuthority.js";
+import { registerFixtureIx } from "./program.js";
 import { runRevealWorker } from "./revealWorker.js";
 
 const connection = new Connection(process.env.RPC_URL ?? "http://127.0.0.1:8899", "confirmed");
@@ -37,12 +38,23 @@ if (process.env.TXLINE_STUB === "1") {
     .consume(txline.scoreEvents())
     .catch((err) => console.error("txline score feed failed", err));
 
-  // Periodic fixtures sync from TxLINE into the DB (API + reveal worker source).
-  // On-chain registration of new fixtures runs from registerFixtures CLI or here.
+  // Periodic fixtures sync from TxLINE into the DB (API + reveal worker
+  // source), then on-chain registration of any fixture that doesn't have a
+  // Fixture PDA yet — without it, commit_pick fails for every new match.
+  const authority = loadFixtureAuthority();
+  const send = sendViaConnection(connection);
   const syncFixtures = async () => {
     const fixtures = await txline!.fetchFixtures();
     upsertFixtures(db, fixtures, Math.floor(Date.now() / 1000));
     console.log(`synced ${fixtures.length} fixtures from txline`);
+    const registered = await registerPendingFixtures(db, async (fixtureId, kickoffTs) => {
+      const tx = new Transaction().add(
+        registerFixtureIx(authority.publicKey, fixtureId, kickoffTs),
+      );
+      tx.feePayer = authority.publicKey;
+      await send(tx, [authority]);
+    });
+    if (registered > 0) console.log(`registered ${registered} new fixtures on-chain`);
   };
   syncFixtures().catch((err) => console.error("fixture sync failed", err));
   setInterval(
