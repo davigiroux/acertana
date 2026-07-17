@@ -16,7 +16,9 @@
   letter-spacing: normal;
 }
 
-.landing p {
+/* :where() keeps this reset at zero specificity so single-class rules
+   like .l-cta-p / .l-hero-sub can set their own margins. */
+.landing :where(p) {
   margin: 0;
 }
 
@@ -68,11 +70,13 @@
   gap: 9px;
 }
 
+/* All landing marks match the app logo: blue ring with a centered dot.
+   Sizes are chosen so the inner gap is a whole pixel on every side. */
 .l-mark {
-  width: 23px;
-  height: 23px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  border: 3.5px solid #2b4bff;
+  border: 3px solid #2b4bff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -84,6 +88,11 @@
   height: 6px;
   border-radius: 50%;
   background: #2b4bff;
+}
+
+.l-phone-mark .l-mark-dot {
+  width: 4px;
+  height: 4px;
 }
 
 .l-wordmark {
@@ -231,7 +240,7 @@
 .l-hero-grid {
   position: relative;
   z-index: 1;
-  padding: 88px 32px 96px;
+  padding: 120px 32px 128px;
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
   gap: 56px;
@@ -382,6 +391,10 @@
   height: 18px;
   border-radius: 50%;
   border: 3px solid #2b4bff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .l-phone-wordmark {
@@ -391,13 +404,14 @@
   color: #0b0d12;
 }
 
+/* Mirrors the app's solid-blue Convidar button (ac-primary-btn). */
 .l-invite-pill {
-  background: #eaedff;
-  color: #2b4bff;
+  background: #2b4bff;
+  color: #fff;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
-  padding: 5px 10px;
+  padding: 6px 12px;
 }
 
 .l-phone-body {
@@ -518,7 +532,7 @@
 
 /* Section header */
 .l-section {
-  padding: 96px 32px 40px;
+  padding: 128px 32px 72px;
 }
 
 .l-section-header {
@@ -606,7 +620,7 @@
 
 /* Features */
 .l-features-section {
-  padding: 56px 32px 40px;
+  padding: 88px 32px 72px;
 }
 
 .l-features-grid {
@@ -738,7 +752,7 @@
 
 /* Scoring band */
 .l-scoring-section {
-  padding: 40px 32px 56px;
+  padding: 72px 32px 104px;
 }
 
 .l-scoring-panel {
@@ -841,7 +855,7 @@
 .l-cta-content {
   position: relative;
   z-index: 1;
-  padding: 80px 32px;
+  padding: 112px 32px;
   text-align: center;
 }
 
@@ -891,6 +905,10 @@
   height: 20px;
   border-radius: 50%;
   border: 3px solid #2b4bff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .l-footer-wordmark {
@@ -943,4 +961,22 @@
 }
 .l-user-email-inverse {
   color: #9096a6;
+}
+
+/* Button + "Conectado como …" stack vertically so the button stays on the
+   band/hero centerline instead of being pushed aside by the email text. */
+.l-cta-logged {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.l-hero-left .l-cta-logged {
+  align-items: flex-start;
+}
+@media (max-width: 900px) {
+  .l-hero-left .l-cta-logged {
+    align-items: center;
+  }
 }

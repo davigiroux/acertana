@@ -1,5 +1,7 @@
 import { Fragment } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useInvisibleWallet } from '../lib/wallet/useInvisibleWallet';
+import { getStats } from '../lib/api';
 import { navigate } from '../lib/router';
 import './LandingPage.css';
 
@@ -85,7 +87,9 @@ function Logo({ markSize, wordmarkClass, markClass }: { markSize: number; wordma
       <span
         className={markClass}
         style={{ width: markSize, height: markSize }}
-      />
+      >
+        <span className="l-mark-dot" />
+      </span>
       <span className={wordmarkClass}>ACERTANA</span>
     </div>
   );
@@ -99,11 +103,16 @@ export function LandingPage() {
   // and a single "Ir ao App" action in every CTA slot instead.
   const goToApp = () => navigate('/home');
 
+  // Honest social proof: real player count from the backend. Falls back to
+  // an aspirational line while loading, on error, or when the count is tiny.
+  const { data: stats } = useQuery({ queryKey: ['stats'], queryFn: getStats, retry: 1 });
+  const players = stats?.players ?? null;
+
   return (
     <div className="landing">
       <nav className="l-nav">
         <div className="l-container l-nav-row">
-          <Logo markSize={23} markClass="l-mark" wordmarkClass="l-wordmark" />
+          <Logo markSize={22} markClass="l-mark" wordmarkClass="l-wordmark" />
           <div className="l-nav-links">
             <a className="l-nav-link" href="#como">
               Como funciona
@@ -161,12 +170,12 @@ export function LandingPage() {
             </p>
             <div className="l-cta-row">
               {authenticated ? (
-                <>
+                <div className="l-cta-logged">
                   <button className="l-btn l-btn-primary l-btn-lg" onClick={goToApp}>
                     Ir ao App
                   </button>
                   {email && <span className="l-user-email">Conectado como {email}</span>}
-                </>
+                </div>
               ) : (
                 <>
                   <button className="l-btn l-btn-primary l-btn-lg" onClick={login}>
@@ -180,7 +189,11 @@ export function LandingPage() {
             </div>
             <div className="l-social-proof">
               <span className="l-avatar-cluster">😀😎🤩😁</span>
-              <span className="l-social-proof-text">+2.400 palpiteiros já estão dentro</span>
+              <span className="l-social-proof-text">
+                {players !== null && players > 1
+                  ? `${players.toLocaleString('pt-BR')} palpiteiros já estão dentro`
+                  : 'Seja um dos primeiros palpiteiros'}
+              </span>
             </div>
           </div>
           <div className="l-hero-right">
@@ -188,10 +201,12 @@ export function LandingPage() {
               <div className="l-phone-screen">
                 <div className="l-phone-header">
                   <div className="l-phone-logo">
-                    <span className="l-phone-mark" />
+                    <span className="l-phone-mark">
+                      <span className="l-mark-dot" />
+                    </span>
                     <span className="l-phone-wordmark">ACERTANA</span>
                   </div>
-                  <span className="l-invite-pill">🔗 Convidar</span>
+                  <span className="l-invite-pill">Convidar</span>
                 </div>
                 <div className="l-phone-body">
                   <div className="l-phone-title">Jogos de hoje</div>
@@ -350,12 +365,12 @@ export function LandingPage() {
           </p>
           <div className="l-cta-row">
             {authenticated ? (
-              <>
+              <div className="l-cta-logged">
                 <button className="l-btn l-btn-primary l-btn-lg" onClick={goToApp}>
                   Ir ao App
                 </button>
                 {email && <span className="l-user-email l-user-email-inverse">Conectado como {email}</span>}
-              </>
+              </div>
             ) : (
               <>
                 <button className="l-btn l-btn-primary l-btn-lg" onClick={login}>

@@ -4,7 +4,7 @@ import type { EntryState } from '../lib/chain/ChainClient';
 import type { PoolPick } from '../lib/api';
 import { describeCommitError } from '../lib/commitError';
 import { scorePick } from '../lib/scoring';
-import { teamName, teamFlag } from '../lib/teams';
+import { teamName, teamFlag, teamCode } from '../lib/teams';
 
 export type FixtureStatus = 'open' | 'committed' | 'locked' | 'revealed';
 
@@ -45,6 +45,47 @@ function TeamRow({
         {name}
       </span>
       {children}
+    </div>
+  );
+}
+
+/** Hero-mockup match layout: flag+code on each side, score boxes centered. */
+function MatchLine({
+  homeFlag,
+  awayFlag,
+  homeCode,
+  awayCode,
+  homeVal,
+  awayVal,
+  boxStyle,
+  dim,
+}: {
+  homeFlag?: string;
+  awayFlag?: string;
+  homeCode: string;
+  awayCode: string;
+  homeVal: React.ReactNode;
+  awayVal: React.ReactNode;
+  boxStyle?: React.CSSProperties;
+  dim?: boolean;
+}) {
+  const sideStyle = dim ? { filter: 'grayscale(.4)', opacity: 0.85 } : undefined;
+  const codeStyle = dim ? { color: '#7A7460' } : undefined;
+  return (
+    <div className="ac-match-main">
+      <div className="ac-match-side" style={sideStyle}>
+        <span className="ac-match-flag">{homeFlag ?? '⚽'}</span>
+        <span className="ac-match-code" style={codeStyle}>{homeCode}</span>
+      </div>
+      <div className="ac-match-score">
+        <span className="ac-score-box" style={boxStyle}>{homeVal}</span>
+        <span className="ac-match-sep">×</span>
+        <span className="ac-score-box" style={boxStyle}>{awayVal}</span>
+      </div>
+      <div className="ac-match-side right" style={sideStyle}>
+        <span className="ac-match-code" style={codeStyle}>{awayCode}</span>
+        <span className="ac-match-flag">{awayFlag ?? '⚽'}</span>
+      </div>
     </div>
   );
 }
@@ -167,17 +208,16 @@ export function FixtureRow({
           <span className="ac-fx-time" style={{ color: '#A99C7E' }}>⏱ {time}</span>
           <span className="ac-badge-late">{entry ? 'Aguardando revelação' : 'Prazo encerrado'}</span>
         </div>
-        <TeamRow flag={homeFlag} name={homeName} dim>
-          <span className="ac-step-val" style={{ minWidth: 36, fontSize: 22, color: result ? '#7A7460' : '#C3B893' }}>
-            {result ? result.home : '—'}
-          </span>
-        </TeamRow>
-        <div className="ac-fx-divider" style={{ background: '#EFE6D0' }} />
-        <TeamRow flag={awayFlag} name={awayName} dim>
-          <span className="ac-step-val" style={{ minWidth: 36, fontSize: 22, color: result ? '#7A7460' : '#C3B893' }}>
-            {result ? result.away : '—'}
-          </span>
-        </TeamRow>
+        <MatchLine
+          homeFlag={homeFlag}
+          awayFlag={awayFlag}
+          homeCode={teamCode(fixture.home)}
+          awayCode={teamCode(fixture.away)}
+          homeVal={result ? result.home : '—'}
+          awayVal={result ? result.away : '—'}
+          boxStyle={{ background: '#F5EEDB', color: result ? '#7A7460' : '#C3B893' }}
+          dim
+        />
         <div className="ac-fx-footnote" style={{ color: '#A9925A', fontWeight: 600, fontSize: 12 }}>
           {entry
             ? 'Palpite travado · será revelado e pontuado em instantes'
@@ -204,13 +244,14 @@ export function FixtureRow({
           </span>
           <span className="ac-badge-saved">Seu palpite: {entry.homeGoals} – {entry.awayGoals}</span>
         </div>
-        <TeamRow flag={homeFlag} name={homeName}>
-          <span className="ac-score-box">{result ? result.home : '–'}</span>
-        </TeamRow>
-        <div className="ac-fx-divider" />
-        <TeamRow flag={awayFlag} name={awayName}>
-          <span className="ac-score-box">{result ? result.away : '–'}</span>
-        </TeamRow>
+        <MatchLine
+          homeFlag={homeFlag}
+          awayFlag={awayFlag}
+          homeCode={teamCode(fixture.home)}
+          awayCode={teamCode(fixture.away)}
+          homeVal={result ? result.home : '–'}
+          awayVal={result ? result.away : '–'}
+        />
         {points !== null && (
           <div
             className="ac-fx-footnote"
@@ -236,14 +277,15 @@ export function FixtureRow({
           <span className="ac-fx-time">⏱ {time}</span>
           <span className="ac-badge-saved">🔒 Palpite salvo</span>
         </div>
-        <TeamRow flag={homeFlag} name={homeName}>
-          {/* Pick is committed on-chain as a hash; the score stays hidden until reveal. */}
-          <span className="ac-score-box">•</span>
-        </TeamRow>
-        <div className="ac-fx-divider" />
-        <TeamRow flag={awayFlag} name={awayName}>
-          <span className="ac-score-box">•</span>
-        </TeamRow>
+        {/* Pick is committed on-chain as a hash; the score stays hidden until reveal. */}
+        <MatchLine
+          homeFlag={homeFlag}
+          awayFlag={awayFlag}
+          homeCode={teamCode(fixture.home)}
+          awayCode={teamCode(fixture.away)}
+          homeVal="•"
+          awayVal="•"
+        />
         <div className="ac-fx-footnote">Palpite travado · resolve às {time}</div>
       </div>
     );
