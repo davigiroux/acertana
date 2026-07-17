@@ -9,7 +9,7 @@ import { useSolanaWallets } from '@privy-io/react-auth/solana';
  * It is created after login completes; always gate on `ready` before signing.
  */
 export function useInvisibleWallet() {
-  const { authenticated, user, login, getAccessToken } = usePrivy();
+  const { authenticated, user, login, logout, getAccessToken } = usePrivy();
   const { wallets, ready } = useSolanaWallets();
 
   const embedded = wallets.find((w) => w.walletClientType === 'privy');
@@ -26,6 +26,8 @@ export function useInvisibleWallet() {
     user,
     /** Opens Privy's email login modal. */
     login,
+    /** Ends the Privy session (clears embedded wallet access). */
+    logout,
     /** Privy access token for authenticating backend calls (null pre-login). */
     getAccessToken,
   };
