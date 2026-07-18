@@ -1,7 +1,7 @@
-//! Acertana — on-chain pick commitment for a free-to-play World Cup prediction
-//! pool. The chain's ONLY job is tamper-proof, kickoff-locked, copy-proof
-//! commitment of picks. No token custody, no escrow, no staking, no transfers
-//! of value.
+//! Acertana — on-chain pick commitment for a World Cup prediction pool.
+//! In this version the chain's only job is tamper-proof, kickoff-locked,
+//! copy-proof commitment of picks: no token custody, no escrow, no staking,
+//! no transfers of value yet (stakes + escrow are planned).
 //!
 //! Design of record: docs/superpowers/specs/2026-07-09-acertana-design-decisions-design.md
 

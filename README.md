@@ -1,9 +1,10 @@
 # Acertana
 
-A free-to-play World Cup **bolão** — a group match-prediction pool. Friends join
-a pool via a share link, predict match outcomes before kickoff, and a
-leaderboard updates live from the TxLINE sports-data feed. Points and bragging
-rights only — **no money, no stakes, no betting, ever**.
+A World Cup **bolão** — a group match-prediction pool. Friends join a pool via
+a share link, predict match outcomes before kickoff, and a leaderboard updates
+live from the TxLINE sports-data feed. Today it's free to play for points and
+bragging rights; group stakes with the platform as the neutral escrow +
+settlement layer are the planned next step.
 
 The differentiator: users sign up with just an email. A Solana wallet is created
 under the hood (an *invisible wallet*, via Privy) — no seed phrase, no connect
