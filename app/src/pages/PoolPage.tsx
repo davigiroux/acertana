@@ -87,14 +87,20 @@ export function PoolPage({
     );
   }, [getAccessToken]);
 
+  // Results ride on /fixtures, so poll it: live scores appear without a
+  // manual reload while a match is playing.
   useEffect(() => {
     if (fixturesProp) return;
     let cancelled = false;
-    getFixtures()
-      .then((f) => !cancelled && setFixtures(f))
-      .catch((e) => !cancelled && setFixturesError(String((e as Error).message ?? e)));
+    const load = () =>
+      getFixtures()
+        .then((f) => !cancelled && setFixtures(f))
+        .catch((e) => !cancelled && setFixturesError(String((e as Error).message ?? e)));
+    load();
+    const interval = setInterval(load, 30_000);
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
   }, [fixturesProp]);
 
@@ -187,20 +193,25 @@ export function PoolPage({
     [wallet, address, poolPubkey, chain, getAccessToken],
   );
 
+  // Poll while the tab is open so standings move with the live scores.
   useEffect(() => {
     if (tab !== 'ranking') return;
     let cancelled = false;
-    (async () =>
-      getLeaderboard(poolPubkey, address ?? undefined, (await getAccessToken()) ?? undefined))()
-      .then((lb) => {
-        if (cancelled) return;
-        setStandings(lb.standings);
-        setProvisional(lb.provisional);
-        setRankingError(null);
-      })
-      .catch((e) => !cancelled && setRankingError(String((e as Error).message ?? e)));
+    const load = () =>
+      (async () =>
+        getLeaderboard(poolPubkey, address ?? undefined, (await getAccessToken()) ?? undefined))()
+        .then((lb) => {
+          if (cancelled) return;
+          setStandings(lb.standings);
+          setProvisional(lb.provisional);
+          setRankingError(null);
+        })
+        .catch((e) => !cancelled && setRankingError(String((e as Error).message ?? e)));
+    load();
+    const interval = setInterval(load, 30_000);
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
   }, [tab, poolPubkey, address, getAccessToken]);
 
