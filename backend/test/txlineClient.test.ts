@@ -73,6 +73,31 @@ describe("mapScoreEvent", () => {
     expect(e).toMatchObject({ homeGoals: 1, awayGoals: 0 });
   });
 
+  it("treats a fully omitted scoreless participant as zero (1-0 goal)", () => {
+    // Observed live (France 1-0 England): the scoreless side's participant
+    // key is omitted entirely, not just its Goals count.
+    const e = mapScoreEvent({
+      FixtureInfo: { FixtureId: 18257865, Participant1IsHome: true },
+      Update: {
+        Action: "goal",
+        FixtureId: 18257865,
+        StatusId: 2,
+        Score: { Participant1: { Total: { Goals: 1 } } },
+        Seq: 12,
+      },
+    });
+    expect(e).toEqual({ fixtureId: 18257865, homeGoals: 1, awayGoals: 0, final: false });
+  });
+
+  it("treats an omitted Participant1 as zero (0-1 goal)", () => {
+    const e = mapScoreEvent({
+      FixtureId: 18257865,
+      StatusId: 2,
+      Score: { Participant2: { Total: { Goals: 1 } } },
+    });
+    expect(e).toMatchObject({ homeGoals: 0, awayGoals: 1 });
+  });
+
   it("maps a goal action to a provisional score", () => {
     expect(mapScoreEvent(goal)).toEqual({
       fixtureId: 17588320,

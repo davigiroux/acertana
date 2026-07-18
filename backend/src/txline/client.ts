@@ -116,9 +116,12 @@ export function mapScoreEvent(s: TxScores): ScoreEvent | null {
   const u = s.Update ?? s;
   const fixtureId = u.FixtureId ?? s.FixtureInfo?.FixtureId ?? s.fixtureId;
   const score = u.Score ?? s.ScoreSoccer ?? s.scoreSoccer;
-  // Zero counts are omitted from Score totals on the live feed (a 0-0 total
-  // has no Goals key at all), so a present Score means goals are known.
-  const hasScore = !!(score?.Participant1 && score.Participant2);
+  // Zero counts are omitted from Score totals on the live feed: a 0-0 total
+  // has no Goals key at all, and a 1-0 omits the scoreless participant
+  // entirely. So ONE present participant means goals are known and the
+  // missing side is 0 — requiring both dropped every scoreline with a zero
+  // in it (observed live: France 1-0 England never ingested).
+  const hasScore = !!(score?.Participant1 || score?.Participant2);
   const p1 = score?.Participant1?.Total?.Goals ?? 0;
   const p2 = score?.Participant2?.Total?.Goals ?? 0;
   const status =
