@@ -89,10 +89,24 @@ Add the deployed app URL to the Privy app's allowed origins.
 
 ## Status
 
-Base app implemented per the design spec
-(`docs/superpowers/specs/2026-07-09-acertana-design-decisions-design.md`):
-program + tests, commit-reveal client lib, backend service, frontend flow,
-scoring/leaderboard. Build story: `docs/BUILD_LOG.md`; goal tracker:
-`docs/GOALS.md`. Historical open questions: `docs/DECISIONS.md` (all resolved
-in the spec). Still stubbed: real TxLINE endpoints, devnet deploy, live Privy
-login (see GOALS pre-blocks).
+The full flow is built and running end-to-end on devnet:
+
+- **On-chain program** (Anchor) — fixture registry, pool creation, pick
+  commit/reveal with kickoff gates; covered by a LiteSVM test suite.
+- **Commit-reveal client lib** — keccak commitments matching the program
+  byte-for-byte, deterministic per-fixture salts from a wallet signature.
+- **Backend** (Fastify + SQLite) — join codes, pool roster with opt-in
+  organizer approval, fixture-authority signer, encrypted-at-rest pick store
+  with an auto-reveal worker, scoring (5/3/1/0) + leaderboard, persistent
+  match results.
+- **Real data + auth** — fixtures and live scores come from the actual TxLINE
+  feed (no more stubs; `TXLINE_STUB=1` remains for local dev), and login is
+  live Privy email auth with the invisible embedded wallet.
+- **Frontend** — create pool (`/novo`), invite share links, join flow, pick UI
+  with kickoff lock, live scores and ranking polled every 30s, post-kickoff
+  view of results, points, and everyone's picks, pt-BR team names, my-bolões
+  home. Deployed on Vercel; backend on Railway; program on devnet.
+
+Build story: `docs/BUILD_LOG.md`; goal tracker: `docs/GOALS.md`. Historical
+open questions: `docs/DECISIONS.md` (all resolved in the spec at
+`docs/superpowers/specs/2026-07-09-acertana-design-decisions-design.md`).
